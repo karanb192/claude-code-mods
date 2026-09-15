@@ -9,6 +9,7 @@ Everything the skill relies on, with the URL. Fetch before trusting any shape; t
 - Function Hooks: Core Architecture (PDF, Alice Poteat, August 2026): https://github.com/user-attachments/files/31802150/EXTERNAL.Function.Hooks.Core.Architecture.pdf
 - Anthropic's built-in mods (`diff`, `sec-default`, `telemetry`), the test kit (`claude plugin test <dir>`, `claude-code/testing` with `mock.env`, `mock.store`, `mock.clock`), and the noun-contract convention: https://github.com/anthropics/claude-code/tree/main/mods
 - The tsconfig those mods build with: https://github.com/anthropics/claude-code/blob/main/mods/tsconfig.json
+- The type declarations those mods are written against, the same file `/plugin-types` writes; every event and every `$` signature on the current binary: https://github.com/anthropics/claude-code/blob/main/mods/types/claude-code.d.ts
 
 ## The scanner and the list
 

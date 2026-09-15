@@ -8,7 +8,7 @@ Verb descriptions come from the `$` cheat sheet (Anthropic, 2026-09-09). Reach l
 
 | Level | Name | Meaning |
 |---|---|---|
-| L0 | draws and remembers | Touches only the screen, the plugin's own store, the clock, commands, session reads, and `$.agent.list`. |
+| L0 | draws and remembers | Touches only the screen, audio, the plugin's own store, the clock, commands, session reads, and `$.agent.list`. |
 | L1 | reads | Reads files, environment variables, settings, or the transcript. Writes the prompt box. Any call the grader does not recognise also lands here, labelled `other: <call>`. |
 | L2 | writes or runs | Writes files, runs processes, sets environment variables or configuration, or drives Claude (model calls, spawning agents, submitting prompts, calling tools, running commands, aborting turns, compacting, registering tools). |
 | L3 | network | `$.http.fetch` or `$.mcp.call`. |
@@ -86,16 +86,18 @@ A mod can add a noun in the `engine.create` fold. Anthropic's built-in `telemetr
 
 ## Signatures seen in shipped source
 
-The cheat sheet names verbs, not argument shapes. These shapes are read from Anthropic's `diff` mod (`mods/diff/hooks/register.ts`) and cc-arcade's `hooks/register.tsx`, both linked in `reading.md`. Confirm against `.claude/types/claude-code.d.ts` after `/plugin-types`.
+The cheat sheet names verbs, not argument shapes. These shapes are read from Anthropic's `diff` mod (`mods/diff/hooks/register.ts`), cc-arcade's `hooks/register.tsx` and Anthropic's published declarations `mods/types/claude-code.d.ts`, all linked in `reading.md`. The declaration file is the full signature list; confirm against `.claude/types/claude-code.d.ts` after `/plugin-types` for the binary you run.
 
 | Call | Shape seen |
 |---|---|
 | `$.store.get(key)`, `$.store.set(key, value)` | string key, JSON value |
 | `$.fs.read(path)`, `$.fs.stat(path)`, `$.fs.list(path)` | string path |
-| `$.fs.write(path, content)` | string path, string content |
+| `$.fs.write(path, text)` | string path, string text (types file) |
 | `$.process.run(argv, init)` | argv array, no shell; resolves `{ exitCode, stdout, stderr }` |
-| `$.ui.log(text)`, `$.ui.status(text)`, `$.ui.toast(text)` | string |
-| `$.ui.open(pane)`, `$.ui.close(pane)` | the pane object, `{ id }` on the cheat sheet |
+| `$.ui.log(text)`, `$.ui.status(text)`, `$.ui.toast(text, options?)` | string; toast takes an options object (types file) |
+| `$.ui.notice(tool_use_id, text)` | the tool use it sits under, then the text (types file) |
+| `$.ui.ask(question, options?)` | a string, then an array of choices or an options object (types file) |
+| `$.ui.open({ id, title, focus, ... })`, `$.ui.close({ id })` | the `diff` mod passes `id`, `title`, `holdToasts`, `closeOnEscape`, `rows`, `focus`; the types file names `{ id, title, focus }` |
 | `$.ui.invalidate('ui.render')` | the event name |
 | `$.ui.resolve(e)` | the render event, returns the element table |
 | `$.command.register(spec)` | a command spec object |

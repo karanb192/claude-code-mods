@@ -65,7 +65,7 @@ Code rules, each from a shipped mod or the cheat sheet:
 
 - Spell every call `$.noun.verb(...)` in full. No computed access, no optional chaining on `$`, no aliasing `$` into a variable.
 - Pass `next` a copy to change the event: `next({ ...e, timeout: 30 })`. Ids on `e` are pinned.
-- Call `next(e)` exactly once on events where core has a side effect (`tool.call`, `prompt.submit`, `agent.spawn`, `command.run`, `config.set`, `session.compact`), unless the hook answers instead.
+- Call `next(e)` exactly once on events where core has a side effect (`tool.call`, `prompt.submit`, `prompt.fill`, `prompt.suggest`, `turn.step`, `session.compact`, `agent.spawn`, `command.run`, `config.set`, `ui.press`, `ui.input`, `ui.message`, `classic.*`), unless the hook answers instead.
 - Add `.catch` to any hook whose failure the user must notice. Without it, a throw or a 10 second overrun skips the hook with one dim line.
 - In a surface module never name a local variable `h`. Clamp drawn rows to `e.props.maxRows`.
 - Comment only a non-obvious constraint. No narration.
@@ -152,7 +152,7 @@ Every Build reply contains a plan before code, validator output after code, and 
 
 - `references/events.md`: every engine event, its payload and result, `next`, the five tiers, failure and recursion rules.
 - `references/nouns.md`: every `$` noun and verb with its reach level and scanner label, the visibility rules, signatures seen in shipped source.
-- `references/gotchas.md`: what shipped mods learned, each attributed to its README with the URL, plus two validator errors reproduced on 2.1.272.
+- `references/gotchas.md`: what shipped mods learned, each attributed to its README with the URL, plus the validator errors reproduced on 2.1.272.
 - `references/threat-model.md`: the five-line template with two worked examples.
 - `references/templates.md`: plugin.json, hooks.json, register.ts shapes, tsconfig, the README section.
 - `references/reading.md`: every link this skill relies on.

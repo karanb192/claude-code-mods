@@ -41,7 +41,8 @@ function grade(calls) {
     level = Math.max(level, rule[1])
     if (rule[2]) labels.add(rule[2])
   }
-  return { level, name: LEVEL_NAMES[level], labels: [...labels] }
+  const order = l => RULES.findIndex(r => r[2] === l)
+  return { level, name: LEVEL_NAMES[level], labels: [...labels].sort((a, b) => order(a) - order(b)) }
 }
 
 function visibility(hooks) {
@@ -109,7 +110,7 @@ for (const err of errors) console.log(`  ✘ ${typeof err === 'string' ? err : J
 
 const sorted = [...calls].sort()
 const reach = grade(sorted)
-console.log(`hooks: ${hooks.map(h => h.event + (Object.keys(h.matcher).length ? JSON.stringify(h.matcher) : '')).join(', ') || '(none)'}`)
+console.log(`hooks: ${hooks.map(h => h.event + (Object.keys(h.matcher).length ? '{' + Object.entries(h.matcher).map(([k, v]) => `${k}=${v}`).join(',') + '}' : '')).join(', ') || '(none)'}`)
 console.log(`calls: ${sorted.join(', ') || '(none)'}`)
 if (surfaces.length) console.log(`surface modules: ${surfaces.join(', ')}`)
 console.log(`reach: L${reach.level} ${reach.name}${reach.labels.length ? ' (' + reach.labels.join(', ') + ')' : ''}`)

@@ -13,7 +13,7 @@ Then say "build a mod", "brainstorm mods" or "review my mod" in a session, or ty
 
 ## What a mod is
 
-A Claude Mod is a Claude Code plugin whose `hooks/hooks.json` names a TypeScript module. The module exports `register(on)`, and each hook is `on("event", matcher, async ($, e, next) => result)`. `$` is the engine interface, an object of nouns with verbs on each (`$.ui.log`, `$.fs.write`, `$.process.run`, `$.http.fetch`, `$.model.classify`, `$.agent.spawn`). `e` is the event. `next(e)` runs every hook beneath and then the engine, and returning without `next` answers in the engine's place. The code runs inside Claude Code's own process, with the process's reach, and costs no tokens.
+A Claude Mod is a Claude Code plugin whose `hooks/hooks.json` names a TypeScript module. The module exports `register(on)`, and each hook is `on("event", matcher, async ($, e, next) => result)`. `$` is the engine interface, an object of nouns with verbs on each (`$.ui.log`, `$.fs.write`, `$.process.run`, `$.http.fetch`, `$.model.classify`, `$.agent.spawn`). `e` is the event. `next(e)` runs every hook beneath and then the engine, and returning without `next` answers in the engine's place. The code runs inside Claude Code's own process, with the process's reach, and costs no tokens unless it calls the model.
 
 Anthropic calls the primitive function hooks. The design thread opened on 2026-09-03 and the built-in mods landed in the claude-code repo on 2026-09-09. It is early access. Nothing loads unless `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` is set, and the API can change between releases. The design thread is https://github.com/anthropics/claude-code/issues/91870.
 

@@ -10,7 +10,9 @@ claude plugin install mod-builder@claude-code-mods
 claude plugin install fable-pin@claude-code-mods
 ```
 
-Then say "build a mod", "brainstorm mods" or "review my mod" in a session, or type `/mod-builder`.
+Then say "what is a Mod", "find a Mod", "build a Mod", "brainstorm Mods",
+"migrate this hook", "review my Mod", "debug my Mod" or "publish my Mod" in
+a session, or type `/mod-builder`.
 
 ## What a mod is
 
@@ -30,7 +32,7 @@ Build mode asks one thing before code, which events the mod must observe and wha
 
 Brainstorm mode starts from a workflow problem, fetches the nightly scan of every mod on GitHub, and proposes 10 to 20 ideas. Each carries its trigger event, the benefit, the `$` calls, the reach level, the privacy risk in one line, whether it belongs in a mod, a shell hook or an external tool, and the mod that already does it if one exists. The list is ranked by benefit per unit of reach and ends with one pick.
 
-Review mode runs the validator on an existing mod and treats every call the README does not explain as a finding.
+Review mode runs the validator on an existing mod and treats every call the README does not explain as a finding. Discover mode checks the live catalogue before it recommends a Mod. Migrate mode chooses between a skill, classic hook, Mod and external tool. Debug mode starts with the current binary's types and validator output. Publish mode prepares validation, a threat model, README evidence and catalogue badges, but never releases anything automatically.
 
 ## A worked example
 

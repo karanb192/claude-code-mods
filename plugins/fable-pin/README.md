@@ -44,3 +44,9 @@ Then from this marketplace:
 ## Typecheck
 
 Run `/plugin-types` inside a session in this folder, then `npx tsc -p .` with the tsconfig from the mod-builder templates. Never commit `.claude/types/`.
+
+## Test
+
+    claude plugin test plugins/fable-pin
+
+One test drives `session.start` and two `agent.spawn` calls through the mod with the official kit from `claude-code/testing`: a subagent asking for another model comes out pinned to the target, a fork keeps its model.

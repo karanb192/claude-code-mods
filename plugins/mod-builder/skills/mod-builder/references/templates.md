@@ -16,6 +16,8 @@ Copy these, then change the names. Every template validates on Claude Code 2.1.2
 
 The validator warns when `author` is missing. Keep the description honest about what the mod reaches; the scanner shows the description beside the footprint.
 
+Two optional manifest fields matter for mods. `userConfig` declares values the person is asked for when the plugin is enabled; they arrive as the second argument of `register(on, options)`, and when the person changes them `register` runs again with the new object (plugin reference; types file). `dependencies` names plugins that must be present; they register after this one (paper 4.1). Shapes for both are in `composing.md`.
+
 ## `hooks/hooks.json`
 
 ```json

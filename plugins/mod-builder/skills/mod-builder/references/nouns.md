@@ -53,6 +53,7 @@ A mod's level is the maximum over its calls. The level orders rows; it says noth
 | `$.ui.close` | close a pane | L0 | draws |
 | `$.ui.invalidate` | re-run a cached event: `ui.render`, `prompt.section`, `tool.describe` | L0 | draws |
 | `$.ui.resolve` | the element constructors for `e.surface` | L0 | draws |
+| `$.ui.blit` | paint cells into a pane you opened | L0 | draws |
 | `$.fs.read` | read a file on the host, with the process's reach | L1 | reads files |
 | `$.fs.write` | write a file on the host | L2 | writes files |
 | `$.fs.list` | list a directory | L1 | reads files |
@@ -81,6 +82,8 @@ A mod's level is the maximum over its calls. The level orders rows; it says noth
 | `$.plugin.root` | where you live | L0 | |
 
 ## Nouns other mods add
+
+How to add one, with its type contract and the provider a test must seat, is in `composing.md`.
 
 A mod can add a noun in the `engine.create` fold. Anthropic's built-in `telemetry` mod adds `$.telemetry.log` and `$.telemetry.mark` (L1, label `telemetry`), which record a first-party analytics row and send nothing where analytics are off. A community mod, `autotel`, adds `$.autotel`. Any other added noun grades as L1 `other`. A mod that depends on another mod's noun needs that mod installed and its types on the tsconfig `include` path (mods README, `reading.md`).
 

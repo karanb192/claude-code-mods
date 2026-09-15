@@ -16,7 +16,7 @@ Function hooks are early access. Nothing loads unless `CLAUDE_CODE_ENABLE_FUNCTI
 | "what is a Mod", "Mods vs hooks", "how do Mods work" | Learn |
 | "find a Mod", "is there a Mod for", "what Mods exist", "install a Mod" | Discover |
 | "build a mod", "write a Claude Mod", a concrete feature, a hooks module question | Build |
-| "review my mod", "audit my mod", a path to an existing plugin | Review (Build from step 5) |
+| "review my mod", "audit my mod", a path to an existing plugin | Review, the order in `references/workflows.md` |
 | "mod idea", "brainstorm mods", "what could I build", a workflow complaint with no feature named | Brainstorm |
 | "turn this hook into a Mod", "should this be a Mod", "skill or Mod" | Migrate |
 | "validator failed", "my Mod does not load", "debug my Mod" | Debug |
@@ -100,7 +100,7 @@ Read the `calls:` line against the Surface line.
 - A call in the plan and not in the output: drop it from the plan.
 - A reach level higher than planned: the user must say yes again.
 
-For a review of an existing mod, start here. Take the plan from the mod's README. Every call the README does not explain is a finding.
+A review of an existing mod follows the order in `references/workflows.md` and uses this step for the footprint comparison. Take the plan from the mod's README. Every call the README does not explain is a finding.
 
 ### 6. Prove the behaviour
 
@@ -114,7 +114,7 @@ intended. For every Mod, write the smallest useful check before handoff:
   render or input path that changed. Do not substitute a fabricated capture.
 
 When writing tests, copy the closest shape from `references/testing.md`. Keep
-the test beside the hook it covers under `tests/`; answer every lower event
+the test under `tests/`, named after the hook file it covers; answer every lower event
 the Mod calls, or the official test kit throws the unhandled event name.
 
 Run `claude plugin test <mod-dir>` when tests exist. If the test kit is not
@@ -186,7 +186,8 @@ Every Build reply contains a plan before code, validator output after code, a be
 - `references/gotchas.md`: what shipped mods learned, each attributed to its README with the URL, plus the validator errors reproduced on 2.1.272.
 - `references/threat-model.md`: the five-line template with two worked examples.
 - `references/templates.md`: plugin.json, hooks.json, register.ts shapes, tsconfig, the README section.
-- `references/testing.md`: official test-kit patterns for a simple hook, a side effect and a clock.
+- `references/testing.md`: official test-kit patterns for a simple hook, a side effect and a clock. A passing example is `plugins/fable-pin/tests/register.test.ts`.
+- `references/composing.md`: adding a noun to `$` with its type contract, an organization's three control points, and options from the manifest.
 - `references/reading.md`: every link this skill relies on.
 - `references/official-sources.md`: which official source answers which question, and the source order.
 - `scripts/footprint.mjs`: validator wrapper, reach grader, plan diff.

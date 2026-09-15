@@ -83,6 +83,8 @@ Components you can match on `ui.render`: `UserMessage`, `AssistantMessage`, `Too
 
 Elements every surface offers: `Box`, `Text`, `Button`, `Input`, `Select`, `Link`, `Code`, `Svg`, `Client`. The terminal draws Ink, desktop draws DOM plus Svg, mobile a smaller table. One tree, the surface picks the constructors. An element the surface does not know renders as a fragment.
 
+The component names and every prop visible at `ui.render` are public plugin API, on the same footing as a tool's input schema (architecture paper 3.2.2). A surface is three things: the jsx function its tree compiles to, the element tags it accepts, and the components it draws. A hook draws with the surface's elements through `$.ui.resolve(e)`; with the surface fixed by a matcher such as `{ surface: "desktop" }` the element table is that surface's exactly, with no surface fixed it is the union the plugin was compiled against, so only shared elements type-check (paper 3.2.3).
+
 A pane: `$.ui.open({ id })` plus `on("ui.render", { component: "Pane", requestId: id }, ...)`. `$.ui.close({ id })` ends it. Redraw with `$.ui.invalidate("ui.render")`; scroll position never moves. Hover is declared on the element (`Box({ hover: { borderColor: "cyan" } })`), applied by the surface, no round trip.
 
 ## Skill, engine and admission events
@@ -111,6 +113,7 @@ Anthropic's `mods/types/claude-code.d.ts` declares these events too. They are re
 | `ui.close` | `{ id, origin }`, `origin.kind` one of `plugin`, `person`, `unload` | pass-through or `{ deny }` | Raised by `$.ui.close` and by the engine when the person or an unload closes a pane. |
 | `ui.focus` | `{ plugin, element, ... }` | pass-through | Focus moved inside something you drew. The `diff` mod hooks it with `{ plugin: <its name> }`. |
 | `ui.scroll` | `{ requestId, by, offset, ... }` | `{}` | The `diff` mod hooks it with `{ requestId: <pane id> }`. Answering without `next` leaves the surface undrawn, so move your own rows by `e.by` and invalidate. |
+| `ui.blit` | `{ requestId, key, cells }` | `{}` | A painter's cells for a pane. A hook above the painter may repaint the cells with `next` or refuse with `{ deny }` (types file). |
 | `ui.select` | `{ plugin, element, component, surface, value }` | `{ element, value }` | A Select you drew was picked from. `next({ ...e, value })` rewrites the pick. |
 
 Run `/plugin-types` and read the `EngineEvents` keys in `.claude/types/claude-code.d.ts` for the full list on the binary you run.
@@ -138,6 +141,8 @@ Run `/plugin-types` and read the `EngineEvents` keys in `.claude/types/claude-co
 Five tiers, authority decreasing toward core: `prepend` (org policy), `user` (what you install), `append` (org policy), `builtin` (ships in the binary), `core` (the engine). On the way down each link can refine `e`; core answers by default; on the way up each link can refine the result. Earlier registration wraps more: position is authority. Within one plugin, hooks keep registration order.
 
 On a managed machine or a Team or Enterprise plan, `sec-default` sits outermost, so a person's plugins cannot touch classic hooks, prompt sections, settings reads or an org-provided tool's description.
+
+Plugins named under `dependencies` in the manifest register after the plugin that names them, so they sit beneath it in every chain (paper 4.1).
 
 ## Failure and recursion
 

@@ -15,11 +15,8 @@ each official source is good for. Full URLs live in `reading.md`.
 
 ## Conflict rule
 
-The current binary wins over every document. A validator result wins over a
-template. The current upstream type declarations beat the cheat sheet and the
-architecture paper. The cheat sheet and paper explain intent but can lag the
-implementation. Built-in Mods are examples, not an API contract. Community
-Mods and the awesome catalogue are discovery evidence only.
+One list, in `reading.md` under Source of truth order. When two sources
+disagree, state the conflict and follow the higher item there.
 
 ## Required research by task
 

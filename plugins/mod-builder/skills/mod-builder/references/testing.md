@@ -25,7 +25,7 @@ claude plugin test <mod-dir>
 ```
 
 The current type declarations accept `prepend`, `user`, `append` and `builtin`.
-A normal installed Mod uses `user`, which is also the test runner default. Use
+A normal installed Mod uses `user`. Use
 another tier only when the test needs to prove tier-specific behaviour.
 
 ## Minimal event test

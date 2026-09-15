@@ -1,0 +1,7 @@
+{
+  "name": "fable-pin",
+  "version": "0.1.0",
+  "description": "Pins every subagent to the fable model: rewrites the model on agent.spawn unless the spawn is a fork, with /fable-pin on, off and status. Touches nothing but its own store. Needs function hooks (early access).",
+  "author": { "name": "Karan Bansal" },
+  "license": "MIT"
+}

@@ -20,6 +20,20 @@
         "skill",
         "security"
       ]
+    },
+    {
+      "name": "fable-pin",
+      "source": "./plugins/fable-pin",
+      "description": "Pins every subagent to the fable model by rewriting agent.spawn, with /fable-pin on, off and status. Reach L0: its own store and one command, nothing else.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module",
+        "plugin-development",
+        "skill",
+        "security"
+      ]
     }
   ]
 }

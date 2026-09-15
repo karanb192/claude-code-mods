@@ -70,9 +70,11 @@ function disarm(s: State) {
 
 async function stop($: EngineInterface, s: State, why: string | null) {
   s.deadline = 0
+  s.every = PING_AFTER_MS
   s.stopped = why
   disarm(s)
   await $.store.set(KEY_DEADLINE, 0)
+  await $.store.delete(KEY_EVERY)
   $.ui.status(statusText(s, await $.clock.now()))
 }
 
@@ -136,8 +138,6 @@ export const register: Register = on => {
     const words = String(e.args ?? '').trim().split(/\s+/).filter(Boolean)
     const now = await $.clock.now()
     if (words[0] === 'off') {
-      s.every = PING_AFTER_MS
-      await $.store.delete(KEY_EVERY)
       await stop($, s, null)
       return { text: 'keepwarm is off' }
     }

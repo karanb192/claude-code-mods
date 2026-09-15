@@ -30,8 +30,14 @@ type ForkAnswer = null | { read: number; write: number }
 
 // The world beneath the mod: its store, the engine's answers, and a fork that
 // replies from a script so each test decides what the cache looked like.
-function world(on: On, forkAnswers: ForkAnswer[]) {
-  mock.store(on, {})
+function world(on: On, forkAnswers: ForkAnswer[], store?: Map<string, unknown>) {
+  // A test that must look inside the store keeps its own map instead of mock.store.
+  if (store) {
+    on('store.get', ($, e) => ({ value: store.get(e.key) }))
+    on('store.set', ($, e) => { store.set(e.key, e.value); return { value: undefined } })
+    on('store.delete', ($, e) => { store.delete(e.key); return { value: undefined } })
+    on('store.keys', () => ({ value: [...store.keys()] }))
+  } else mock.store(on, {})
   const forks: number[] = []
   const status: Array<string | undefined> = []
   on('session.start', ($, e) => ({ cwd: e.cwd }))
@@ -121,25 +127,28 @@ describe('register', () => {
     expect(w.status.at(-1)).toMatch(/either the snapshot was cold or the API call failed/)
   })
 
-  test('the window ends and off cancels', async ($, on) => {
+  test('the window ends on its own, forgetting the every knob, and off cancels', async ($, on) => {
     const clock = mock.clock(on, { now: START })
-    const w = world(on, [warm, warm, warm])
+    const store = new Map<string, unknown>()
+    const w = world(on, [warm, warm, warm], store)
     await $.session.start(session)
-    await $.command.run(run('70m'))
+    await $.command.run(run('3m every 1m'))
     await $.turn.complete(turn())
-    await clock.advance(50 * MIN)
+    await clock.advance(1 * MIN)
     expect(w.forks.length).toBe(1)
-    await clock.advance(50 * MIN)
-    expect(w.forks.length).toBe(1)
+    await clock.advance(5 * MIN)
+    expect(w.forks.length).toBe(2)
     expect(w.status.at(-1)).toBe(undefined)
-
+    expect(store.has('every')).toBe(false)
+    expect(store.get('deadline')).toBe(0)
     await $.command.run(run('6h'))
     await $.turn.complete(turn())
     await clock.advance(10 * MIN)
+    expect(w.forks.length).toBe(2)
     const off = await $.command.run(run('off'))
     expect(off.text).toBe('keepwarm is off')
     await clock.advance(60 * MIN)
-    expect(w.forks.length).toBe(1)
+    expect(w.forks.length).toBe(2)
   })
 
   test('the every knob lasts one window only', async ($, on) => {

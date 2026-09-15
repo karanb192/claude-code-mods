@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "mod-builder",
+  "displayName": "Mod Builder",
+  "version": "0.1.0",
+  "description": "Plan, write, validate and review a Claude Mod (a plugin with a function-hooks module). Picks the smallest $ surface for the job and states the reach level before any code, generates the three files, runs claude plugin validate, refuses to widen the footprint without a reason, and writes a five-line threat model. A brainstorm mode ranks 10 to 20 ideas by benefit per unit of reach and checks each against every mod already on GitHub.",
+  "skills": ["./skills/mod-builder"],
+  "author": {
+    "name": "Karan Bansal",
+    "url": "https://karanbansal.in"
+  },
+  "homepage": "https://github.com/karanb192/claude-code-mods",
+  "repository": "https://github.com/karanb192/claude-code-mods",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "claude-mods",
+    "function-hooks",
+    "hooks-module",
+    "plugin",
+    "skill",
+    "threat-model"
+  ]
+}

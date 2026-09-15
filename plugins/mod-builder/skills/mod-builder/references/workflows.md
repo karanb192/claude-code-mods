@@ -69,6 +69,29 @@ If the current binary conflicts with a reference, report the conflict and use
 the current binary. Never patch around a validator error by using computed `$`
 access, aliases or optional chaining.
 
+## Review
+
+Review an existing Mod in this order. Report findings by severity and include
+the exact file, event or `$` call for every finding.
+
+1. Run `claude plugin validate` and compare its hooks, calls and surface
+   modules with the README's claimed Surface, Reach and Sees lines.
+2. Read each event against `events.md`. Flag unbounded visibility such as bare
+   `tool.call`, `prompt.submit`, `skill.prompt` or `*` when a matcher could do
+   the job.
+3. Read each `$` call against `nouns.md`. Flag an unneeded higher-reach call,
+   an unnamed network host, or non-literal input in a process argument, path,
+   URL or prompt.
+4. Check `next`: side-effect events call it exactly once unless the Mod
+   intentionally answers instead; errors the user must notice have a `.catch`.
+5. Check the threat model and README against the validator output. A missing
+   claim is a finding even when the code itself is harmless.
+6. Run the existing tests, if any. State clearly when the review did not prove
+   runtime behaviour.
+
+End with the smallest fix set. Do not rewrite the Mod or raise its reach unless
+the user asks for implementation.
+
 ## Publish
 
 Publishing is a handoff, never an automatic release. Before asking the user to
@@ -80,6 +103,7 @@ publish, verify:
 - The README says how to enable function hooks, install the plugin and disable
   it.
 - `/plugin-types` and `tsc` pass when the Mod uses TypeScript or JSX.
+- Existing tests pass, or the README says which runtime path remains untested.
 - The Mod's source has no secret, token or user-controlled text interpolated
   into process arguments, paths, URLs or prompts.
 

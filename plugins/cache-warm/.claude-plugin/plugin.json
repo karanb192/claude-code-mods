@@ -1,0 +1,7 @@
+{
+  "name": "cache-warm",
+  "version": "0.1.0",
+  "description": "Keeps the 1-hour prompt cache warm for a window you set: /keepwarm 6h arms a timer that re-arms on every model request and, after 50 idle minutes, sends one tool-less fork over the session's own transcript so the cache is read instead of re-written when you come back. Stops itself the moment a ping reads cold. Needs function hooks (early access).",
+  "author": { "name": "Karan Bansal" },
+  "license": "MIT"
+}

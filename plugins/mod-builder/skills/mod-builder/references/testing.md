@@ -28,6 +28,21 @@ The current type declarations accept `prepend`, `user`, `append` and `builtin`.
 A normal installed Mod uses `user`. Use
 another tier only when the test needs to prove tier-specific behaviour.
 
+## Typed inputs, no casts
+
+A test gets the engine's own `$`, so a verb on it takes the full event input, pinned fields included: `$.agent.spawn` in a test wants `AgentSpawnInput` (`tool_use_id`, `provider`, `parentModel`, `fork` and the rest), not the `{ prompt, model? }` a plugin passes at runtime. That is what lets a test drive a branch the plugin-side call cannot reach, such as `e.fork`. Build inputs with a typed helper and `Partial` overrides, import the types from `claude-code`, and never `as any`: a cast keeps compiling after the shape changes and teaches the next reader the wrong API.
+
+```ts
+import type { AgentSpawnInput } from 'claude-code'
+
+const spawn = (over: Partial<AgentSpawnInput>): AgentSpawnInput => ({
+  tool_use_id: 't1', prompt: 'worker task', description: 'worker', subagentType: 'general-purpose',
+  provider: { plugin: 'engine', tier: 'core' }, parentModel: 'opus', background: false, fork: false, ...over,
+})
+```
+
+Add `tests` to the tsconfig `include` so `npx tsc -p .` checks the tests against the generated types. `plugins/fable-pin/tests/register.test.ts` is the passing, typechecked example.
+
 ## Minimal event test
 
 This test drives a `session.start` hook and supplies the core answer beneath

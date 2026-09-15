@@ -49,4 +49,4 @@ Run `/plugin-types` inside a session in this folder, then `npx tsc -p .` with th
 
     claude plugin test plugins/fable-pin
 
-One test drives `session.start` and two `agent.spawn` calls through the mod with the official kit from `claude-code/testing`: a subagent asking for another model comes out pinned to the target, a fork keeps its model.
+Two tests, on the official kit from `claude-code/testing`. The first drives `session.start` and two `agent.spawn` calls through the mod: a subagent asking for another model comes out pinned to the target, a fork keeps its model. The second runs `/fable-pin off` and checks the next spawn is left alone. The inputs are typed `AgentSpawnInput` and `CommandRunInput` from `claude-code` with no casts; add `tests` to the tsconfig `include` and `npx tsc -p .` checks them too.

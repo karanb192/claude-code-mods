@@ -116,7 +116,7 @@ Name the file `register.tsx`, add the tsconfig below, and never name a local var
     "jsxFactory": "h",
     "jsxFragmentFactory": "Fragment"
   },
-  "include": [".claude/types", "hooks"]
+  "include": [".claude/types", "hooks", "tests"]
 }
 ```
 

@@ -1,0 +1,160 @@
+---
+name: mod-builder
+description: Plans, writes, validates and reviews a Claude Mod, a Claude Code plugin whose hooks/hooks.json names a TypeScript module of function hooks on the engine's events. Every idea must justify each process, file, network, model or UI capability it requests, so this skill picks the smallest $ surface, states the reach level before code exists, runs claude plugin validate, refuses to widen the footprint without a written reason, and ends with a five-line threat model. A brainstorm mode fetches every mod already on GitHub and ranks 10 to 20 ideas by benefit per unit of reach. Trigger phrases include "build a mod", "write a Claude Mod", "function hook", "hooks module", "mod idea", "brainstorm mods", "what could I build as a mod", "review my mod", "/mod-builder".
+---
+
+# Mod builder
+
+A Claude Mod runs inside Claude Code's own process with the process's reach. The only record of what it can do is the `$` calls it makes, and `claude plugin validate` prints them before any code runs. This skill turns that fact into a pipeline: plan the surface, write the code, read the validator back, then write the threat model. Never generate mod code before the plan exists.
+
+Function hooks are early access. Nothing loads unless `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` is set, and the API can change between releases. Read `references/gotchas.md` before the first line of code and `references/events.md` or `references/nouns.md` whenever an event or verb is in doubt. Do not invent an event or a verb. If a shape is uncertain, say so and point at `/plugin-types`.
+
+## Pick the mode
+
+| The user says | Mode |
+|---|---|
+| "build a mod", "write a Claude Mod", a concrete feature, a hooks module question | Build |
+| "review my mod", a path to an existing plugin | Review (Build from step 5) |
+| "mod idea", "brainstorm mods", "what could I build", a workflow complaint with no feature named | Brainstorm |
+
+When the request is ambiguous, restate it in one line and ask one question.
+
+## Build a mod
+
+### 1. Fix the trigger and the job
+
+Write two lines before anything else:
+
+- Observe: the event or events the mod must see, with the matcher that narrows each one. Take names from `references/events.md`.
+- Do: what the mod must be able to do, as verbs on `$`. Take names from `references/nouns.md`.
+
+If the user gave a feature and not the events, infer both lines from the feature and show them. Prefer a matcher over a bare event: `tool.call{tool=Bash}` over `tool.call`. A mod that hooks `tool.call` with no matcher sees every tool call, `prompt.submit` sees every prompt, and `*` sees everything. Say which applies.
+
+### 2. Budget the surface
+
+For each verb in the Do line, write one line: the hook that calls it, and what breaks if it is removed. Remove any verb where nothing breaks. Then read the reach level off `references/nouns.md` and state it:
+
+```
+Surface: $.ui.log, $.store.get, $.store.set
+Reach: L0 draws and remembers
+Sees: Bash calls
+```
+
+Rules for the budget:
+
+- If the job can be done at a lower level, do it at the lower level. Reading `$.session.repo` beats running `git remote -v` with `$.process.run`.
+- `$.http.fetch` and `$.mcp.call` need a named host and a named payload in the plan. No host, no network.
+- `$.process.run` needs a literal argv in the plan. No interpolated user text into argv.
+- `$.model.*`, `$.agent.spawn`, `$.prompt.submit` and `$.tool.call` drive Claude and cost tokens. Name the trigger that bounds how often they run.
+- If the job is one shell command on one classic event with no drawing and no state, say that a classic settings hook is enough, and stop.
+
+Show the plan to the user and get a yes before step 3. This is the one blocking question in the pipeline.
+
+### 3. Write the files
+
+Copy shapes from `references/templates.md`. Write exactly these files into the target directory:
+
+- `.claude-plugin/plugin.json` with `name`, `version`, `description`, `author`, `license`.
+- `hooks/hooks.json` with `{ "modules": ["./register.ts"] }`.
+- `hooks/register.ts` exporting `register(on)`. Use `.tsx` only when the mod draws with JSX.
+- `.gitignore` with `.claude/types/`.
+
+Add `tsconfig.json` only when the mod draws or the user wants `tsc`. Add a surface module only when the mod needs its own frame clock or keyboard on the drawing thread. A surface module is a `Client` element with a string-literal path.
+
+Code rules, each from a shipped mod or the cheat sheet:
+
+- Spell every call `$.noun.verb(...)` in full. No computed access, no optional chaining on `$`, no aliasing `$` into a variable.
+- Pass `next` a copy to change the event: `next({ ...e, timeout: 30 })`. Ids on `e` are pinned.
+- Call `next(e)` exactly once on events where core has a side effect (`tool.call`, `prompt.submit`, `agent.spawn`, `command.run`, `config.set`, `session.compact`), unless the hook answers instead.
+- Add `.catch` to any hook whose failure the user must notice. Without it, a throw or a 10 second overrun skips the hook with one dim line.
+- In a surface module never name a local variable `h`. Clamp drawn rows to `e.props.maxRows`.
+- Comment only a non-obvious constraint. No narration.
+
+### 4. Validate and paste
+
+Run the bundled script, which wraps the validator and grades the result with the scanner's rules:
+
+```sh
+node <skill-dir>/scripts/footprint.mjs <mod-dir> --plan '<the Surface line from step 2, comma separated>'
+```
+
+`<skill-dir>` is the directory this SKILL.md lives in. Paste the full output into the reply. The script exits 1 when validation fails or when the validator printed a call the plan did not list. Without Node, run `claude plugin validate .claude-plugin/plugin.json` directly and paste that.
+
+### 5. Compare calls to plan
+
+Read the `calls:` line against the Surface line.
+
+- A call in the output and not in the plan: remove the call, or write one sentence that states why the plan grows and update the Surface and Reach lines. Never widen silently.
+- A call in the plan and not in the output: drop it from the plan.
+- A reach level higher than planned: the user must say yes again.
+
+For a review of an existing mod, start here. Take the plan from the mod's README. Every call the README does not explain is a finding.
+
+### 6. Write the threat model
+
+Five lines, template and worked examples in `references/threat-model.md`. Fill each line from the validator output, not from intent. Line 5 names what happens when the prompt, a tool result, a file or a network reply is crafted against this mod.
+
+### 7. Hand over
+
+End the reply with, in this order:
+
+1. The file tree.
+2. The validator output, verbatim.
+3. The Surface, Reach and Sees lines.
+4. The threat model.
+5. How to load it for one session: `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir <mod-dir>`. Then how to keep it on: `{ "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }` in `~/.claude/settings.json`, with the note that this loads the hooks module of every installed plugin that has one.
+6. How to typecheck: run `/plugin-types` inside a session in the mod folder, then `npx tsc -p .`. Never commit `.claude/types/`.
+7. How to get the badges once the repo is public: the nightly scan at https://github.com/karanb192/awesome-claude-code-mods finds any public repo that ships `hooks/hooks.json` with a `modules` key. The badge URLs are `https://raw.githubusercontent.com/karanb192/awesome-claude-code-mods/main/badges/OWNER--REPO--NAME-reach.svg` and the same with `-validates.svg`, where `NAME` is the `name` from `plugin.json`. To be listed sooner, add `owner/repo` to `data/seeds.txt` there by pull request.
+
+## Brainstorm mods
+
+### 1. Start from the workflow problem
+
+Ask for, or take from the request, the moment in the user's day that hurts. One sentence. Do not start from what mods can do.
+
+### 2. Fetch what exists
+
+Run the bundled script:
+
+```sh
+node <skill-dir>/scripts/list-mods.mjs            # every mod, newest scan
+node <skill-dir>/scripts/list-mods.mjs pr ci      # keyword filter, all words must match
+```
+
+It reads https://raw.githubusercontent.com/karanb192/awesome-claude-code-mods/main/data/mods.json and prints name, reach, hooks, calls, URL and description per mod. Without Node, fetch that URL with `curl` and read `mods[]` where `kind` is `mod`. If the fetch fails, say so. Then use the categories known to be covered on 2026-09-15: usage and context dashboards, games and breathing bands above the prompt, PR and CI trackers, secret redaction, mermaid rendering, memory layers, a subagent tree pane.
+
+### 3. Propose 10 to 20 ideas
+
+One row per idea, every column filled:
+
+| Column | Content |
+|---|---|
+| Idea | one line |
+| Trigger | the event with its matcher |
+| Benefit | what the user gets, one line |
+| Calls | the `$` verbs, from `references/nouns.md` |
+| Reach | L0 to L3, from the calls |
+| Risk | privacy or security, one line |
+| Form | mod, classic shell hook, or external tool, with the reason |
+| Exists | the mod that already does it, with its URL, or "nothing on the list" |
+
+Form rules: a classic shell hook when one command on one classic event does the job. An external tool when the job does not need the session's events or `$`. A mod otherwise.
+
+### 4. Rank
+
+Rank by benefit per unit of reach. Two ideas with equal benefit: the lower reach wins. An idea that a listed mod already does ranks below every idea that nothing does. The one exception is a proposal that names a concrete gap in the existing mod. End with the ranked table and one pick, with the reason in one sentence. Offer to build the pick with the Build mode.
+
+## Output contract
+
+Every Build reply contains a plan before code, validator output after code, and a threat model after the validator. Every Brainstorm reply contains the fetch result count, the table, the ranking and one pick. A reply that skips a stage says which stage it skipped and why.
+
+## References
+
+- `references/events.md`: every engine event, its payload and result, `next`, the five tiers, failure and recursion rules.
+- `references/nouns.md`: every `$` noun and verb with its reach level and scanner label, the visibility rules, signatures seen in shipped source.
+- `references/gotchas.md`: what shipped mods learned, each attributed to its README with the URL, plus two validator errors reproduced on 2.1.272.
+- `references/threat-model.md`: the five-line template with two worked examples.
+- `references/templates.md`: plugin.json, hooks.json, register.ts shapes, tsconfig, the README section.
+- `references/reading.md`: every link this skill relies on.
+- `scripts/footprint.mjs`: validator wrapper, reach grader, plan diff.
+- `scripts/list-mods.mjs`: fetch and filter the nightly scan.

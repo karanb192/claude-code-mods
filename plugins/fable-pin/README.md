@@ -43,10 +43,14 @@ Then from this marketplace:
 
 ## Typecheck
 
-Run `/plugin-types` inside a session in this folder, then `npx tsc -p .` with the tsconfig from the mod-builder templates. Never commit `.claude/types/`.
+Inside a Claude Code session started in this folder, run `/plugin-types`. It writes `.claude/types/claude-code.d.ts` for the installed version; that folder is git-ignored. Then, from this folder:
+
+    npx -y -p typescript@5 tsc -p .
+
+The tsconfig here includes `hooks` and `tests`, so the hook and both tests are checked against the generated declarations. Nothing else is needed; there is no package.json.
 
 ## Test
 
     claude plugin test plugins/fable-pin
 
-Two tests, on the official kit from `claude-code/testing`. The first drives `session.start` and two `agent.spawn` calls through the mod: a subagent asking for another model comes out pinned to the target, a fork keeps its model. The second runs `/fable-pin off` and checks the next spawn is left alone. The inputs are typed `AgentSpawnInput` and `CommandRunInput` from `claude-code` with no casts; add `tests` to the tsconfig `include` and `npx tsc -p .` checks them too.
+Two tests, on the official kit from `claude-code/testing`. The first drives `session.start` and two `agent.spawn` calls through the mod: a subagent asking for another model comes out pinned to the target, a fork keeps its model. The second runs `/fable-pin off` and checks the next spawn is left alone. The inputs are typed `AgentSpawnInput` and `CommandRunInput` from `claude-code` with no casts; the Typecheck section below has the exact command that checks them.

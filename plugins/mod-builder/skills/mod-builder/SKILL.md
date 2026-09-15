@@ -113,6 +113,10 @@ intended. For every Mod, write the smallest useful check before handoff:
 - A UI Mod: manually load it in an interactive terminal and exercise the one
   render or input path that changed. Do not substitute a fabricated capture.
 
+When writing tests, copy the closest shape from `references/testing.md`. Keep
+the test beside the hook it covers under `tests/`; answer every lower event
+the Mod calls, or the official test kit throws the unhandled event name.
+
 Run `claude plugin test <mod-dir>` when tests exist. If the test kit is not
 available or the user did not ask for test files, say that runtime behaviour is
 unverified. Never call a passing validator a behavioural test.
@@ -182,6 +186,7 @@ Every Build reply contains a plan before code, validator output after code, a be
 - `references/gotchas.md`: what shipped mods learned, each attributed to its README with the URL, plus the validator errors reproduced on 2.1.272.
 - `references/threat-model.md`: the five-line template with two worked examples.
 - `references/templates.md`: plugin.json, hooks.json, register.ts shapes, tsconfig, the README section.
+- `references/testing.md`: official test-kit patterns for a simple hook, a side effect and a clock.
 - `references/reading.md`: every link this skill relies on.
 - `references/official-sources.md`: which official source answers which question, and the source order.
 - `scripts/footprint.mjs`: validator wrapper, reach grader, plan diff.

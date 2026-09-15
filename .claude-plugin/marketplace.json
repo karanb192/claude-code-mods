@@ -1,0 +1,25 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-code-mods",
+  "description": "Claude Mods and the tools to build them: a builder skill, then mods.",
+  "owner": {
+    "name": "Karan Bansal",
+    "url": "https://github.com/karanb192"
+  },
+  "plugins": [
+    {
+      "name": "mod-builder",
+      "source": "./plugins/mod-builder",
+      "description": "A skill that plans, writes, validates and reviews a Claude Mod. Every idea must justify each process, file, network, model or UI capability it requests: plan first, smallest $ surface, validator output pasted, a five-line threat model. A brainstorm mode checks ideas against every mod already on GitHub.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module",
+        "plugin-development",
+        "skill",
+        "security"
+      ]
+    }
+  ]
+}

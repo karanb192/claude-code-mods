@@ -1,0 +1,4 @@
+# written by /plugin-types inside a plugin folder; version-specific, never committed
+.claude/types/
+node_modules/
+.DS_Store

@@ -1,4 +1,4 @@
-import type { Register } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
 const PING_AFTER_MS = 50 * 60 * 1000
 const MIN_PING_MS = 60 * 1000
@@ -17,6 +17,16 @@ const PRICES: Array<[string, number, number]> = [
 ]
 
 type PingRecord = { at: number; read: number; write: number; usd: number | null; warm: boolean }
+
+type State = {
+  deadline: number
+  every: number
+  lastRequestAt: number
+  lastModel: string | null
+  pending: { cancel: () => void } | null
+  last: PingRecord | null
+  stopped: string | null
+}
 
 function priceOf(model: string | null): [number, number] | null {
   const m = (model ?? '').toLowerCase()
@@ -45,20 +55,10 @@ function fmtTok(n: number): string {
   return n >= 1000 ? Math.round(n / 1000) + 'k' : String(n)
 }
 
-type State = {
-  deadline: number
-  every: number
-  lastRequestAt: number
-  lastModel: string | null
-  pending: { cancel: () => void } | null
-  last: PingRecord | null
-  stopped: string | null
-}
-
 function statusText(s: State, now: number): string | undefined {
   if (s.stopped) return `keepwarm stopped: ${s.stopped}`
   if (!s.deadline) return undefined
-   const pingText = s.last ? ` · last ping read ${fmtTok(s.last.read)} ${fmtUsd(s.last.usd)}` : ''
+  const pingText = s.last ? ` · last ping read ${fmtTok(s.last.read)} ${fmtUsd(s.last.usd)}` : ''
   const nextText = s.lastRequestAt ? ` · ping in ${fmtDuration(s.lastRequestAt + s.every - now)}` : ' · waiting for the first turn'
   return `keepwarm ${fmtDuration(s.deadline - now)} left${nextText}${pingText}`
 }
@@ -68,7 +68,7 @@ function disarm(s: State) {
   s.pending = null
 }
 
-async function stop($: any, s: State, why: string | null) {
+async function stop($: EngineInterface, s: State, why: string | null) {
   s.deadline = 0
   s.stopped = why
   disarm(s)
@@ -76,7 +76,7 @@ async function stop($: any, s: State, why: string | null) {
   $.ui.status(statusText(s, await $.clock.now()))
 }
 
-async function arm($: any, s: State) {
+async function arm($: EngineInterface, s: State) {
   disarm(s)
   if (!s.deadline) return
   const now = await $.clock.now()
@@ -88,7 +88,7 @@ async function arm($: any, s: State) {
   $.ui.status(statusText(s, now))
 }
 
-async function ping($: any, s: State) {
+async function ping($: EngineInterface, s: State) {
   s.pending = null
   if (!s.deadline) return
   const now = await $.clock.now()
@@ -99,9 +99,9 @@ async function ping($: any, s: State) {
   try {
     reply = await $.model.fork({ prompt: PING_PROMPT })
   } catch (err) {
-    return stop($, s, `the ping failed: ${err instanceof Error ? err.message : String(err)}`)
+    return stop($, s, `the ping failed, ${err instanceof Error ? err.message : String(err)}`)
   }
-  if (reply === null) return stop($, s, 'the engine reported a cold snapshot, so a ping would have re-written the context')
+  if (reply === null) return stop($, s, 'the engine did not send the ping, either the snapshot was cold or the API call failed')
   const u = reply.usage
   const price = priceOf(s.lastModel)
   const warm = u.cache_read_input_tokens >= u.cache_creation_input_tokens
@@ -124,7 +124,7 @@ export const register: Register = on => {
     s.every = typeof savedEvery === 'number' && savedEvery >= MIN_PING_MS ? savedEvery : PING_AFTER_MS
     await $.command.register({
       name: 'keepwarm',
-      description: 'Keep the prompt cache warm for a window: 6h, 90m, off or status (cache-warm)',
+      description: 'Keep the prompt cache warm for a window, 6h or 90m, or off, or status (cache-warm)',
       argumentHint: '[6h | off | status]',
       immediate: true,
     })
@@ -136,24 +136,29 @@ export const register: Register = on => {
     const words = String(e.args ?? '').trim().split(/\s+/).filter(Boolean)
     const now = await $.clock.now()
     if (words[0] === 'off') {
+      s.every = PING_AFTER_MS
+      await $.store.delete(KEY_EVERY)
       await stop($, s, null)
       return { text: 'keepwarm is off' }
     }
     if (words.length && words[0] !== 'status') {
       const window = parseDuration(words[0])
       if (window == null) return { text: 'keepwarm takes a window such as 6h or 90m, or off, or status' }
-      // "every 2m" is a testing knob; below one minute the pings would cost more than they save.
+      // "every 2m" is a testing knob and lasts only for the window it was given with.
+      let every = PING_AFTER_MS
       if (words[1] === 'every') {
         const period = parseDuration(words[2] ?? '')
         if (period == null || period < MIN_PING_MS) return { text: 'every takes a period of at least 1m' }
-        s.every = period
-        await $.store.set(KEY_EVERY, period)
+        every = period
       }
+      s.every = every
+      if (every === PING_AFTER_MS) await $.store.delete(KEY_EVERY)
+      else await $.store.set(KEY_EVERY, every)
       s.deadline = now + window
       s.stopped = null
       await $.store.set(KEY_DEADLINE, s.deadline)
       await arm($, s)
-      return { text: `keepwarm on for ${fmtDuration(window)}: a ping ${fmtDuration(s.every)} after each idle stretch keeps the cache read, not re-written` }
+      return { text: `keepwarm on for ${fmtDuration(window)}, a ping ${fmtDuration(every)} after each idle stretch keeps the cache read, not re-written` }
     }
     return { text: statusText(s, now) ?? 'keepwarm is off' }
   })

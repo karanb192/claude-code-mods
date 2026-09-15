@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "mod-builder",
   "displayName": "Mod Builder",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A skill that explains, finds, plans, writes, migrates, validates, reviews, debugs and publishes Claude Mods. Plan first, smallest $ surface, validator output pasted, a typed test on the official kit, a five-line threat model. Brainstorm mode checks ideas against every mod already on GitHub.",
   "skills": [
     "./skills/mod-builder"

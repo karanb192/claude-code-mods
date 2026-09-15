@@ -1,12 +1,13 @@
 # claude-code-mods
 
-Claude Mods and the tools to build them. The first tool is `mod-builder`, a skill that plans a mod's capability budget before it writes a line, then validates the result and writes the threat model. Mods come next, in `plugins/`.
+Claude Mods and the tools to build them. The first tool is `mod-builder`, a skill that plans a mod's capability budget before it writes a line, then validates the result and writes the threat model. The first mod is `fable-pin`, which pins every subagent to one model by rewriting `agent.spawn`; it was built with the skill and its README carries the validator output and the threat model. Both install from this marketplace.
 
 ## Install
 
 ```sh
 claude plugin marketplace add karanb192/claude-code-mods
 claude plugin install mod-builder@claude-code-mods
+claude plugin install fable-pin@claude-code-mods
 ```
 
 Then say "build a mod", "brainstorm mods" or "review my mod" in a session, or type `/mod-builder`.

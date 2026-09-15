@@ -1,0 +1,4 @@
+{
+  "description": "fable-pin: session.start, command.run{command=fable-pin}, agent.spawn. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "modules": ["./register.ts"]
+}

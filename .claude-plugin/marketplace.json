@@ -36,9 +36,9 @@
       ]
     },
     {
-      "name": "cache-warm",
-      "source": "./plugins/cache-warm",
-      "description": "Keeps the 1-hour prompt cache warm for a window you set. After 50 idle minutes /keepwarm sends one cache-shared fork so your comeback is a read, not an 80x re-write, and stops itself the moment a ping reads cold. Reach L2, one $.model.fork per idle stretch, its own store, a status slot.",
+      "name": "cache-tax",
+      "source": "./plugins/cache-tax",
+      "description": "cache-tax, the Mod. Stops a cold send once with its price, keeps the 1-hour prompt cache warm for a window you set (/keepwarm 6h), arms that for you after a paid cold write, and keeps score. Reach L2, one $.model.fork per idle stretch, its own store, a status slot; sees prompt length only.",
       "category": "development",
       "tags": [
         "mods",

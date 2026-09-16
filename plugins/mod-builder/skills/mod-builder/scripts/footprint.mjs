@@ -100,7 +100,8 @@ for (const part of [report.manifest, ...(report.contents ?? [])]) {
     const s = note.match(/surface modules: (.*)$/)
     if (h) hooks.push(...parseHooks(h[2]))
     // The validator annotates a call reached through a helper as `$.x.y (via helper)`.
-    if (c) for (const call of c[2].split(',').map(x => x.trim().replace(/\s*\(via [^)]*\)$/, '')).filter(Boolean)) calls.add(call)
+    // The validator annotates a call reached through helpers as `$.x.y (via a, b)`, so split on commas outside parentheses.
+    if (c) for (const call of c[2].split(/,\s*(?![^(]*\))/).map(x => x.trim().replace(/\s*\(via [^)]*\)$/, '')).filter(Boolean)) calls.add(call)
     if (s) surfaces.push(...s[1].split(',').map(x => x.trim()))
   }
 }

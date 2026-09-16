@@ -1,6 +1,6 @@
 # claude-code-mods
 
-Claude Mods and the tools to build them. The first tool is `mod-builder`, a skill that plans a mod's capability budget before it writes a line, then validates the result and writes the threat model. The first mod is `fable-pin`, which pins every subagent to one model by rewriting `agent.spawn`. The second is `cache-warm`, which keeps the 1-hour prompt cache alive for a window you set by sending one cache-shared fork after 50 idle minutes, and stops itself when a ping reads cold. Both were built with the skill and their READMEs carry the validator output and the threat model. All three install from this marketplace.
+Claude Mods and the tools to build them. The first tool is `mod-builder`, a skill that plans a mod's capability budget before it writes a line, then validates the result and writes the threat model. The first mod is `fable-pin`, which pins every subagent to one model by rewriting `agent.spawn`. The second is `cache-tax`, the Mod form of the hook of the same name in claude-code-hooks: it stops a cold send once with its price, keeps the 1-hour prompt cache alive for a window you set, and keeps score of what cold writes cost. Both were built with the skill and their READMEs carry the validator output and the threat model. All three install from this marketplace.
 
 ## Install
 
@@ -8,7 +8,7 @@ Claude Mods and the tools to build them. The first tool is `mod-builder`, a skil
 claude plugin marketplace add karanb192/claude-code-mods
 claude plugin install mod-builder@claude-code-mods
 claude plugin install fable-pin@claude-code-mods
-claude plugin install cache-warm@claude-code-mods
+claude plugin install cache-tax@claude-code-mods
 ```
 
 Then say "what is a Mod", "find a Mod", "build a Mod", "brainstorm Mods",

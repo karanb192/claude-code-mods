@@ -99,7 +99,8 @@ for (const part of [report.manifest, ...(report.contents ?? [])]) {
     const c = note.match(/^(\S+) calls: (.*)$/)
     const s = note.match(/surface modules: (.*)$/)
     if (h) hooks.push(...parseHooks(h[2]))
-    if (c) for (const call of c[2].split(',').map(x => x.trim()).filter(Boolean)) calls.add(call)
+    // The validator annotates a call reached through a helper as `$.x.y (via helper)`.
+    if (c) for (const call of c[2].split(',').map(x => x.trim().replace(/\s*\(via [^)]*\)$/, '')).filter(Boolean)) calls.add(call)
     if (s) surfaces.push(...s[1].split(',').map(x => x.trim()))
   }
 }

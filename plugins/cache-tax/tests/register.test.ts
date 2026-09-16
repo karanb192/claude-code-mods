@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier } from 'claude-code/testing'
 import type { CommandRunInput, ModelForkResult, On, PromptSubmitInput, SessionStartInput, TurnCompleteInput, TurnUsage } from 'claude-code'
 
-import { fmtDuration, freshState, parseDuration, seedFromResume } from '../hooks/register'
+import { fmtDuration, freshState, parseDuration, resetForClear, seedFromResume } from '../hooks/register'
 
 tier('user')
 
@@ -32,7 +32,7 @@ type ForkAnswer = null | { read: number; write: number }
 
 // The world beneath the mod: its store, the engine's answers, and a fork that
 // replies from a script so each test decides what the cache looked like.
-function world(on: On, forkAnswers: ForkAnswer[], opts: { store?: Map<string, unknown>; commands?: string[] } = {}) {
+function world(on: On, forkAnswers: ForkAnswer[], opts: { store?: Map<string, unknown>; commands?: string[]; live?: { tokens?: number } } = {}) {
   if (opts.store) {
     const store = opts.store
     on('store.get', ($, e) => ({ value: store.get(e.key) }))
@@ -45,7 +45,7 @@ function world(on: On, forkAnswers: ForkAnswer[], opts: { store?: Map<string, un
   const logs: string[] = []
   const entered: string[] = []
   on('session.start', ($, e) => ({ cwd: e.cwd }))
-  on('session.usage', () => ({ value: { context: { window: 1000000 }, rateLimits: [] } }))
+  on('session.usage', () => ({ value: { context: { window: 1000000, tokens: opts.live?.tokens }, rateLimits: [] } }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('command.list', () => ({ value: (opts.commands ?? []).map(name => ({ name, description: '', source: 'plugin' as const })) }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
@@ -136,6 +136,37 @@ describe('guard', () => {
     const card = await $.command.run(run('cache-tax', 'status'))
     expect(card.text).toMatch(/session     1 cold write paid, \$4\.01/)
     expect(card.text).toMatch(/keepwarm    on, 2h10m left/)
+  })
+
+  test('context comes from the live window, not the turn\'s summed usage', async ($, on) => {
+    mock.clock(on, { now: START })
+    const live: { tokens?: number } = {}
+    const w = world(on, [], { live })
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    live.tokens = 100000
+    await $.turn.complete(turn({ usage: usage({ cache_read_input_tokens: 500000, cache_creation_input_tokens: 2000 }) }))
+    const card = await $.command.run(run('cache-tax', 'status'))
+    expect(card.text).toMatch(/context     100,000 tokens/)
+    expect(card.text).toMatch(/0 cold writes paid/)
+    expect(w.status.at(-1)).toBe(undefined)
+  })
+
+  test('/clear forgets the context, the clock and the tally', async () => {
+    const s = freshState()
+    s.ctx = 200000
+    s.lastRequestAt = START - 2 * HOUR
+    s.ackedAt = s.lastRequestAt
+    s.misses = [{ at: START, tokens: 200000, usd: 4 }]
+    let cancelled = false
+    s.pending = { cancel: () => { cancelled = true } }
+    resetForClear(s)
+    expect(s.ctx).toBe(0)
+    expect(s.lastRequestAt).toBe(0)
+    expect(s.ackedAt).toBe(0)
+    expect(s.misses).toEqual([])
+    expect(s.pending).toBe(null)
+    expect(cancelled).toBe(true)
   })
 
   test('an unguarded full miss is scored too', async ($, on) => {

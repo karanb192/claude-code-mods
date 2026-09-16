@@ -99,6 +99,17 @@ export type ResumeFields = {
   estimated_cache_write_usd?: number
 }
 
+/** /clear starts a new conversation in the same process; nothing priced before it still exists. */
+export function resetForClear(s: State) {
+  s.ctx = 0
+  s.lastRequestAt = 0
+  s.compacted = false
+  s.ackedAt = 0
+  s.coldWritePending = false
+  s.misses = []
+  disarm(s)
+}
+
 /** Applies a resumed session's fields to the state; returns the line to log, if any. */
 export function seedFromResume(s: State, e: ResumeFields, now: number): string | null {
   if (e.source !== 'resume' && e.source !== 'fork') return null
@@ -233,7 +244,7 @@ export const register: Register = on => {
     // The hook form of cache-tax ships a /cache-tax:status skill; both installed means two guards.
     const commands = await $.command.list()
     if (commands.some(c => c.name === 'cache-tax:status')) {
-      $.ui.log('cache-tax: the hook form (cache-tax@claude-code-hooks) is also installed, so a cold send will be warned about twice. Uninstall it, or /cache-tax guard warn here.')
+      $.ui.log('cache-tax: the hook form (cache-tax@claude-code-hooks) is also installed, so a cold send is warned about or refused twice. Uninstall it, or /cache-tax guard warn here.')
     }
     $.ui.status(statusText(s, now))
     return r
@@ -244,6 +255,11 @@ export const register: Register = on => {
   // classic events, so the seeding itself is the exported pure function.
   on('classic.SessionStart', async ($, e, next) => {
     const r = await next(e)
+    if (e.source === 'clear') {
+      resetForClear(s)
+      $.ui.status(statusText(s, await $.clock.now()))
+      return r
+    }
     const line = seedFromResume(s, e, await $.clock.now())
     if (line) $.ui.log(line)
     return r
@@ -284,7 +300,7 @@ export const register: Register = on => {
     return { text: card(s, now) }
   })
 
-  // The message that pays. Only its length and first character are read.
+  // The message that pays. Only its first character is read.
   on('prompt.submit', async ($, e, next) => {
     if (e.origin.kind === 'plugin') return next(e)
     if (typeof e.text !== 'string' || e.text.trimStart().startsWith('/')) return next(e)
@@ -301,7 +317,7 @@ export const register: Register = on => {
       return next(e)
     }
     s.ackedAt = s.lastRequestAt
-    return { drop: `cache-tax: ${guardText(s, now)} Press Enter on the same message to pay it, and keepwarm will then hold the cache for ${fmtDuration(AUTO_WARM_MS)}. Or /clear and start from a note.` }
+    return { drop: `cache-tax: ${guardText(s, now)} Send it again to pay it, and keepwarm will then hold the cache for ${fmtDuration(AUTO_WARM_MS)}. Or /clear and start from a note.` }
   })
 
   on('turn.step', async function* ($, e, next) {
@@ -321,10 +337,13 @@ export const register: Register = on => {
     if (u) {
       if (u.model) s.lastModel = u.model
       const prev = s.ctx
+      // A turn's usage is its responses summed, so a ten-step turn reports ten
+      // reads of the context. The live window is the engine's figure; the sum
+      // is only the fallback for a host that reports no tokens.
       const write = u.cache_creation_input_tokens
-      const read = u.cache_read_input_tokens
-      s.ctx = u.input_tokens + read + write
-      const full = prev > 20000 && write >= 0.5 * prev && read < 0.5 * prev
+      const live = (await $.session.usage()).context.tokens
+      s.ctx = live && live > 0 ? live : u.input_tokens + u.cache_read_input_tokens + write
+      const full = prev > 20000 && write >= 0.5 * prev
       if (full || s.coldWritePending) {
         const price = priceOf(s.lastModel)
         const usd = price ? write * price[1] / 1e6 : null

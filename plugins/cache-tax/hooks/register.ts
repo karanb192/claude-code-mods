@@ -137,7 +137,7 @@ export function seedFromResume(s: State, e: ResumeFields, now: number): string |
   s.compacted = false
   if (e.prompt_cache_likely_expired !== true || s.ctx < BIG_TOKENS) return null
   const usd = typeof e.estimated_cache_write_usd === 'number' ? fmtUsd(e.estimated_cache_write_usd) : fmtUsd(coldUsd(s))
-  return `cache-tax: resuming cold. The first message re-writes ${s.ctx.toLocaleString('en-US')} tokens, about ${usd}. /clear and paste a summary if you only need the conclusions.`
+  return `resuming cold. The first message re-writes ${s.ctx.toLocaleString('en-US')} tokens, about ${usd}. /clear and paste a summary if you only need the conclusions.`
 }
 
 function statusText(s: State, now: number): string | undefined {
@@ -239,7 +239,7 @@ async function startWindow($: EngineInterface, s: State, windowMs: number, every
 
 function card(s: State, now: number): string {
   const lines: string[] = []
-  lines.push(`cache-tax · ${s.lastModel ?? 'model not seen yet'}`)
+  lines.push(`${s.lastModel ?? 'model not seen yet'}`)
   if (s.compacted) lines.push('state       reset by compaction, waiting for the first turn')
   else if (!s.lastRequestAt) lines.push('state       no request yet this session')
   else if (isCold(s, now)) lines.push(`state       COLD, last request ${fmtDuration(now - s.lastRequestAt)} ago`)
@@ -298,7 +298,7 @@ export const register: Register = on => {
     // The hook form of cache-tax ships a /cache-tax:status skill; both installed means two guards.
     const commands = await $.command.list()
     if (commands.some(c => c.name === 'cache-tax:status')) {
-      $.ui.log('cache-tax: the hook form (cache-tax@claude-code-hooks) is also installed, so a cold send is warned about or refused twice. Uninstall it, or /cache-tax guard warn here.')
+      $.ui.log('the hook form (cache-tax@claude-code-hooks) is also installed, so a cold send is warned about or refused twice. Uninstall it, or /cache-tax guard warn here.')
     }
     $.ui.status(statusText(s, now))
     return r
@@ -372,7 +372,7 @@ export const register: Register = on => {
     const now = await $.clock.now()
     if (!isCold(s, now) || s.ctx < BIG_TOKENS) return next(e)
     if (s.guard === 'warn') {
-      $.ui.log(`cache-tax: ${guardText(s, now)} Sending anyway; keepwarm will hold the cache for ${fmtDuration(AUTO_WARM_MS)} once it lands.`)
+      $.ui.log(`${guardText(s, now)} Sending anyway; keepwarm will hold the cache for ${fmtDuration(AUTO_WARM_MS)} once it lands.`)
       s.coldWritePending = true
       return next(e)
     }
@@ -415,7 +415,7 @@ export const register: Register = on => {
         s.misses.push({ at: now, tokens: write, usd })
         if (s.deadline < now + AUTO_WARM_MS) {
           await startWindow($, s, AUTO_WARM_MS, s.every)
-          $.ui.log(`cache-tax: cold write of ${fmtTok(write)} tokens paid (${fmtUsd(usd)}). Keeping the cache warm for ${fmtDuration(AUTO_WARM_MS)} so it is not paid again today; /keepwarm off to stop.`)
+          $.ui.log(`cold write of ${fmtTok(write)} tokens paid (${fmtUsd(usd)}). Keeping the cache warm for ${fmtDuration(AUTO_WARM_MS)} so it is not paid again today; /keepwarm off to stop.`)
         }
       }
     }

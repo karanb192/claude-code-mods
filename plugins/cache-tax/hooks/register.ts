@@ -82,7 +82,12 @@ function warmUsd(s: State): number | null {
   return price ? s.ctx * price[0] / 1e6 : null
 }
 
-/** How many pings at the read rate cost as much as one cold write of the same context. */
+/** Everything a fork bills: the cache read, any cache write, uncached input at the base rate (half the 1h write rate), and the output. */
+function pingUsd(u: { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number }, price: [number, number, number]): number {
+  return (u.cache_read_input_tokens * price[0] + u.cache_creation_input_tokens * price[1] + u.input_tokens * price[1] / 2 + u.output_tokens * price[2]) / 1e6
+}
+
+/** The read-only upper bound: pings at the cache-read rate that cost as much as one cold write of the same context. */
 function breakEvenPings(s: State): number | null {
   const price = priceOf(s.lastModel)
   if (!price || s.ctx <= 0) return null
@@ -97,7 +102,7 @@ function guardText(s: State, now: number): string {
   const price = priceOf(s.lastModel)
   const rate = price ? `$${price[1]}/MTok` : 'the cache-write rate'
   const warm = warmUsd(s)
-  return `the prompt cache went cold ${fmtDuration(now - s.lastRequestAt)} ago. Sending this re-writes ` +
+  return `the prompt cache went cold ${fmtDuration(now - s.lastRequestAt - TTL_MS)} ago. Sending this re-writes ` +
     `${s.ctx.toLocaleString('en-US')} tokens at ${rate} = ${fmtUsd(coldUsd(s))}` +
     (warm == null ? '' : ` (a warm turn would have cost ${fmtUsd(warm)})`) + '.'
 }
@@ -147,13 +152,17 @@ function disarm(s: State) {
   s.pending = null
 }
 
-async function stop($: EngineInterface, s: State, why: string | null) {
+async function stop($: EngineInterface, s: State, why: string | null, forgetAlways = false) {
   s.deadline = 0
   s.every = PING_AFTER_MS
   s.stopped = why
   disarm(s)
   await $.store.set(KEY_DEADLINE, 0)
   await $.store.delete(KEY_EVERY)
+  if (forgetAlways) {
+    s.always = false
+    await $.store.delete(KEY_ALWAYS)
+  }
   $.ui.status(statusText(s, await $.clock.now()))
 }
 
@@ -185,10 +194,11 @@ async function ping($: EngineInterface, s: State) {
   if (reply === null) return stop($, s, 'the engine did not send the ping, either the snapshot was cold or the API call failed')
   const u = reply.usage
   const price = priceOf(s.lastModel)
-  const warm = u.cache_read_input_tokens >= u.cache_creation_input_tokens
-  const usd = price ? (u.cache_read_input_tokens * price[0] + u.cache_creation_input_tokens * price[1] + u.output_tokens * price[2]) / 1e6 : null
+  // A warm ping reads the prefix and writes only its own few tokens; a write past a tenth of the read means the prefix broke.
+  const warm = u.cache_read_input_tokens > 0 && u.cache_creation_input_tokens < 0.1 * u.cache_read_input_tokens
+  const usd = price ? pingUsd(u, price) : null
   s.last = { at: now, read: u.cache_read_input_tokens, write: u.cache_creation_input_tokens, usd, warm }
-  if (!warm) return stop($, s, `the ping wrote ${fmtTok(u.cache_creation_input_tokens)} tokens (${fmtUsd(usd)}), the cache was already gone`)
+  if (!warm) return stop($, s, `the ping read ${fmtTok(u.cache_read_input_tokens)} and wrote ${fmtTok(u.cache_creation_input_tokens)} tokens (${fmtUsd(usd)}), the cache was already gone`)
   s.lastRequestAt = now
   await arm($, s)
 }
@@ -214,9 +224,10 @@ function card(s: State, now: number): string {
   lines.push(`context     ${s.ctx.toLocaleString('en-US')} tokens`)
   lines.push(`cold cost   ${fmtUsd(coldUsd(s))} to re-write it (warm turn ${fmtUsd(warmUsd(s))})`)
   const always = s.always ? ' (always)' : ''
-  lines.push(`keepwarm    ${s.deadline ? (statusText(s, now) ?? '').replace(/^keepwarm /, 'on, ') + always : s.stopped ? `stopped, ${s.stopped}` : 'off (/keepwarm to arm it for 6h00m)'}`)
+  const idle = s.always ? 'off until the next session start, which arms 6h00m (always)' : 'off (/keepwarm to arm it for 6h00m)'
+  lines.push(`keepwarm    ${s.deadline ? (statusText(s, now) ?? '').replace(/^keepwarm /, 'on, ') + always : s.stopped ? `stopped, ${s.stopped}${always}` : idle}`)
   const pings = breakEvenPings(s)
-  if (pings != null) lines.push(`break-even  ${pings} pings cost one cold write, so keepwarm pays for itself up to ${fmtDuration(pings * PING_AFTER_MS)} of idle`)
+  if (pings != null) lines.push(`break-even  up to ${pings} pings at the read rate cost one cold write, about ${fmtDuration(pings * s.every)} of idle at one ping per ${fmtDuration(s.every)}`)
   lines.push(`guard       ${s.guard === 'refuse' ? 'refuse once (/cache-tax guard warn to only show the price)' : 'warn only (/cache-tax guard refuse to be stopped once)'}`)
   const paid = s.misses.reduce((a, m) => a + (m.usd ?? 0), 0)
   lines.push(`session     ${s.misses.length} cold write${s.misses.length === 1 ? '' : 's'} paid, ${fmtUsd(paid)}`)
@@ -243,7 +254,8 @@ export const register: Register = on => {
     s.every = typeof savedEvery === 'number' && savedEvery >= MIN_PING_MS ? savedEvery : PING_AFTER_MS
     s.guard = savedGuard === 'warn' ? 'warn' : 'refuse'
     s.always = (await $.store.get(KEY_ALWAYS)) === true
-    if (s.always && !s.deadline) s.deadline = now + DEFAULT_WINDOW_MS
+    // Always means a fresh default window every session, whatever the last one left behind.
+    if (s.always) await startWindow($, s, DEFAULT_WINDOW_MS, PING_AFTER_MS)
     const usage = await $.session.usage()
     if (usage.context.tokens) s.ctx = usage.context.tokens
     await $.command.register({
@@ -287,9 +299,7 @@ export const register: Register = on => {
     const now = await $.clock.now()
     if (words[0] === 'off') {
       const wasAlways = s.always
-      s.always = false
-      await $.store.delete(KEY_ALWAYS)
-      await stop($, s, null)
+      await stop($, s, null, true)
       return { text: wasAlways ? 'keepwarm is off, and no longer arms itself at session start' : 'keepwarm is off' }
     }
     if (words[0] === 'always') {

@@ -4,20 +4,24 @@ const TTL_MS = 60 * 60 * 1000
 const PING_AFTER_MS = 50 * 60 * 1000
 const MIN_PING_MS = 60 * 1000
 const AUTO_WARM_MS = 3 * 60 * 60 * 1000
+const DEFAULT_WINDOW_MS = 6 * 60 * 60 * 1000
 const BIG_TOKENS = 50000
 const PING_PROMPT = 'Reply with the single word: warm'
 const KEY_DEADLINE = 'deadline'
 const KEY_EVERY = 'every'
 const KEY_GUARD = 'guard'
+const KEY_ALWAYS = 'always'
 
-// $ per million tokens, [cache read, 1h cache write], list prices September 2026.
-const PRICES: Array<[string, number, number]> = [
-  ['fable-5-1', 0.25, 20],
-  ['fable-5', 1, 20],
-  ['opus-5', 0.5, 10],
-  ['opus-4', 0.5, 10],
-  ['sonnet', 0.3, 6],
-  ['haiku', 0.1, 2],
+// $ per million tokens, [cache read, 1h cache write, output], list prices September 2026.
+// Longer family names first: a model id matches the first row it contains.
+const PRICES: Array<[string, number, number, number]> = [
+  ['fable-5-1', 0.25, 20, 50],
+  ['fable-5', 1, 20, 50],
+  ['opus-5', 0.5, 10, 25],
+  ['opus-4', 0.5, 10, 25],
+  ['sonnet-5', 0.2, 4, 10],
+  ['sonnet', 0.3, 6, 15],
+  ['haiku', 0.1, 2, 5],
 ]
 
 type PingRecord = { at: number; read: number; write: number; usd: number | null; warm: boolean }
@@ -27,6 +31,7 @@ type GuardMode = 'refuse' | 'warn'
 export type State = {
   deadline: number
   every: number
+  always: boolean
   lastRequestAt: number
   lastModel: string | null
   ctx: number
@@ -40,9 +45,9 @@ export type State = {
   stopped: string | null
 }
 
-function priceOf(model: string | null): [number, number] | null {
+function priceOf(model: string | null): [number, number, number] | null {
   const m = (model ?? '').toLowerCase()
-  for (const [family, read, write] of PRICES) if (m.includes(family)) return [read, write]
+  for (const [family, read, write, output] of PRICES) if (m.includes(family)) return [read, write, output]
   return null
 }
 
@@ -77,6 +82,18 @@ function warmUsd(s: State): number | null {
   return price ? s.ctx * price[0] / 1e6 : null
 }
 
+/** Everything a fork bills: the cache read, any cache write, uncached input at the base rate (half the 1h write rate), and the output. */
+function pingUsd(u: { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number }, price: [number, number, number]): number {
+  return (u.cache_read_input_tokens * price[0] + u.cache_creation_input_tokens * price[1] + u.input_tokens * price[1] / 2 + u.output_tokens * price[2]) / 1e6
+}
+
+/** The read-only upper bound: pings at the cache-read rate that cost as much as one cold write of the same context. */
+function breakEvenPings(s: State): number | null {
+  const price = priceOf(s.lastModel)
+  if (!price || s.ctx <= 0) return null
+  return Math.floor(price[1] / price[0])
+}
+
 function isCold(s: State, now: number): boolean {
   return s.lastRequestAt > 0 && !s.compacted && now - s.lastRequestAt >= TTL_MS
 }
@@ -85,7 +102,7 @@ function guardText(s: State, now: number): string {
   const price = priceOf(s.lastModel)
   const rate = price ? `$${price[1]}/MTok` : 'the cache-write rate'
   const warm = warmUsd(s)
-  return `the prompt cache went cold ${fmtDuration(now - s.lastRequestAt)} ago. Sending this re-writes ` +
+  return `the prompt cache went cold ${fmtDuration(now - s.lastRequestAt - TTL_MS)} ago. Sending this re-writes ` +
     `${s.ctx.toLocaleString('en-US')} tokens at ${rate} = ${fmtUsd(coldUsd(s))}` +
     (warm == null ? '' : ` (a warm turn would have cost ${fmtUsd(warm)})`) + '.'
 }
@@ -135,13 +152,17 @@ function disarm(s: State) {
   s.pending = null
 }
 
-async function stop($: EngineInterface, s: State, why: string | null) {
+async function stop($: EngineInterface, s: State, why: string | null, forgetAlways = false) {
   s.deadline = 0
   s.every = PING_AFTER_MS
   s.stopped = why
   disarm(s)
   await $.store.set(KEY_DEADLINE, 0)
   await $.store.delete(KEY_EVERY)
+  if (forgetAlways) {
+    s.always = false
+    await $.store.delete(KEY_ALWAYS)
+  }
   $.ui.status(statusText(s, await $.clock.now()))
 }
 
@@ -173,10 +194,11 @@ async function ping($: EngineInterface, s: State) {
   if (reply === null) return stop($, s, 'the engine did not send the ping, either the snapshot was cold or the API call failed')
   const u = reply.usage
   const price = priceOf(s.lastModel)
-  const warm = u.cache_read_input_tokens >= u.cache_creation_input_tokens
-  const usd = price ? (u.cache_read_input_tokens * price[0] + u.cache_creation_input_tokens * price[1]) / 1e6 : null
+  // A warm ping reads the prefix and writes only its own message; a write of a tenth of the read or more means the prefix broke.
+  const warm = u.cache_read_input_tokens > 0 && u.cache_creation_input_tokens < 0.1 * u.cache_read_input_tokens
+  const usd = price ? pingUsd(u, price) : null
   s.last = { at: now, read: u.cache_read_input_tokens, write: u.cache_creation_input_tokens, usd, warm }
-  if (!warm) return stop($, s, `the ping wrote ${fmtTok(u.cache_creation_input_tokens)} tokens (${fmtUsd(usd)}), the cache was already gone`)
+  if (!warm) return stop($, s, `the ping read ${fmtTok(u.cache_read_input_tokens)} and wrote ${fmtTok(u.cache_creation_input_tokens)} tokens (${fmtUsd(usd)}), the cache was already gone`)
   s.lastRequestAt = now
   await arm($, s)
 }
@@ -201,7 +223,11 @@ function card(s: State, now: number): string {
   else lines.push(`state       warm, ${fmtDuration(s.lastRequestAt + TTL_MS - now)} left`)
   lines.push(`context     ${s.ctx.toLocaleString('en-US')} tokens`)
   lines.push(`cold cost   ${fmtUsd(coldUsd(s))} to re-write it (warm turn ${fmtUsd(warmUsd(s))})`)
-  lines.push(`keepwarm    ${s.deadline ? (statusText(s, now) ?? '').replace(/^keepwarm /, 'on, ') : s.stopped ? `stopped, ${s.stopped}` : 'off (/keepwarm 6h to arm it)'}`)
+  const always = s.always ? ' (always)' : ''
+  const idle = s.always ? 'off until the next session start, which arms 6h00m (always)' : 'off (/keepwarm to arm it for 6h00m)'
+  lines.push(`keepwarm    ${s.deadline ? (statusText(s, now) ?? '').replace(/^keepwarm /, 'on, ') + always : s.stopped ? `stopped, ${s.stopped}${always}` : idle}`)
+  const pings = breakEvenPings(s)
+  if (pings != null) lines.push(`break-even  up to ${pings} pings at the read rate cost one cold write, about ${fmtDuration(pings * s.every)} of idle at one ping per ${fmtDuration(s.every)}`)
   lines.push(`guard       ${s.guard === 'refuse' ? 'refuse once (/cache-tax guard warn to only show the price)' : 'warn only (/cache-tax guard refuse to be stopped once)'}`)
   const paid = s.misses.reduce((a, m) => a + (m.usd ?? 0), 0)
   lines.push(`session     ${s.misses.length} cold write${s.misses.length === 1 ? '' : 's'} paid, ${fmtUsd(paid)}`)
@@ -210,7 +236,7 @@ function card(s: State, now: number): string {
 
 export function freshState(): State {
   return {
-    deadline: 0, every: PING_AFTER_MS, lastRequestAt: 0, lastModel: null, ctx: 0, compacted: false,
+    deadline: 0, every: PING_AFTER_MS, always: false, lastRequestAt: 0, lastModel: null, ctx: 0, compacted: false,
     guard: 'refuse', ackedAt: 0, coldWritePending: false, misses: [], pending: null, last: null, stopped: null,
   }
 }
@@ -227,12 +253,15 @@ export const register: Register = on => {
     s.deadline = typeof saved === 'number' && saved > now ? saved : 0
     s.every = typeof savedEvery === 'number' && savedEvery >= MIN_PING_MS ? savedEvery : PING_AFTER_MS
     s.guard = savedGuard === 'warn' ? 'warn' : 'refuse'
+    s.always = (await $.store.get(KEY_ALWAYS)) === true
+    // Always means a fresh default window every session, whatever the last one left behind.
+    if (s.always) await startWindow($, s, DEFAULT_WINDOW_MS, PING_AFTER_MS)
     const usage = await $.session.usage()
     if (usage.context.tokens) s.ctx = usage.context.tokens
     await $.command.register({
       name: 'keepwarm',
-      description: 'Keep the prompt cache warm for a window, 6h or 90m, or off, or status (cache-tax)',
-      argumentHint: '[6h | off | status]',
+      description: 'Keep the prompt cache warm: bare for 6h, a window such as 90m, always, off, or status (cache-tax)',
+      argumentHint: '[6h | always | off | status]',
       immediate: true,
     })
     await $.command.register({
@@ -269,12 +298,23 @@ export const register: Register = on => {
     const words = String(e.args ?? '').trim().split(/\s+/).filter(Boolean)
     const now = await $.clock.now()
     if (words[0] === 'off') {
-      await stop($, s, null)
-      return { text: 'keepwarm is off' }
+      const wasAlways = s.always
+      await stop($, s, null, true)
+      return { text: wasAlways ? 'keepwarm is off, and no longer arms itself at session start' : 'keepwarm is off' }
     }
-    if (words.length && words[0] !== 'status') {
+    if (words[0] === 'always') {
+      s.always = true
+      await $.store.set(KEY_ALWAYS, true)
+      await startWindow($, s, DEFAULT_WINDOW_MS, PING_AFTER_MS)
+      return { text: `keepwarm always on: every session starts with a ${fmtDuration(DEFAULT_WINDOW_MS)} window; /keepwarm off turns it off for good` }
+    }
+    if (!words.length) {
+      await startWindow($, s, DEFAULT_WINDOW_MS, PING_AFTER_MS)
+      return { text: `keepwarm on for ${fmtDuration(DEFAULT_WINDOW_MS)}, a ping ${fmtDuration(PING_AFTER_MS)} after each idle stretch keeps the cache read, not re-written` }
+    }
+    if (words[0] !== 'status') {
       const window = parseDuration(words[0])
-      if (window == null) return { text: 'keepwarm takes a window such as 6h or 90m, or off, or status' }
+      if (window == null) return { text: 'keepwarm takes a window such as 6h or 90m, or always, off, or status' }
       // "every 2m" is a testing knob and lasts only for the window it was given with.
       let every = PING_AFTER_MS
       if (words[1] === 'every') {

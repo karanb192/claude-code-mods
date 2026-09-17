@@ -29,6 +29,7 @@ type Miss = { at: number; tokens: number; usd: number | null }
 type GuardMode = 'refuse' | 'warn'
 
 export type State = {
+  sid: string
   deadline: number
   every: number
   always: boolean
@@ -46,7 +47,7 @@ export type State = {
 }
 
 function priceOf(model: string | null): [number, number, number] | null {
-  const m = (model ?? '').toLowerCase()
+  const m = (model ?? '').toLowerCase().replace(/[\s.]+/g, '-')
   for (const [family, read, write, output] of PRICES) if (m.includes(family)) return [read, write, output]
   return null
 }
@@ -61,6 +62,7 @@ export function fmtDuration(ms: number): string {
   const total = Math.max(0, Math.round(ms / 60000))
   const h = Math.floor(total / 60)
   const m = total % 60
+  if (h >= 48) return `${Math.floor(h / 24)}d ${h % 24}h`
   return h > 0 ? `${h}h${String(m).padStart(2, '0')}m` : `${m}m`
 }
 
@@ -136,7 +138,7 @@ export function seedFromResume(s: State, e: ResumeFields, now: number): string |
   s.compacted = false
   if (e.prompt_cache_likely_expired !== true || s.ctx < BIG_TOKENS) return null
   const usd = typeof e.estimated_cache_write_usd === 'number' ? fmtUsd(e.estimated_cache_write_usd) : fmtUsd(coldUsd(s))
-  return `cache-tax: resuming cold. The first message re-writes ${s.ctx.toLocaleString('en-US')} tokens, about ${usd}. /clear and paste a summary if you only need the conclusions.`
+  return `resuming cold. The first message re-writes ${s.ctx.toLocaleString('en-US')} tokens, about ${usd}. /clear and paste a summary if you only need the conclusions.`
 }
 
 function statusText(s: State, now: number): string | undefined {
@@ -152,13 +154,35 @@ function disarm(s: State) {
   s.pending = null
 }
 
+// The window and its ping period belong to the session that armed them, so a
+// second session, or one resumed from another transcript, never inherits them
+// and cannot turn them off. The always switch and the guard mode stay global.
+function deadlineKey(s: State): string {
+  return `${KEY_DEADLINE}:${s.sid}`
+}
+
+function everyKey(s: State): string {
+  return `${KEY_EVERY}:${s.sid}`
+}
+
+/** Clears this session's own dead window and the bare keys a store written before 2.1.1 still holds. Other sessions' keys are never touched: a read followed by a delete cannot be made atomic against their renewal. */
+async function prune($: EngineInterface, s: State, now: number) {
+  for (const key of [KEY_DEADLINE, deadlineKey(s)]) {
+    const deadline = await $.store.get(key)
+    if (deadline === undefined) continue
+    if (typeof deadline === 'number' && deadline > now) continue
+    await $.store.delete(key)
+    await $.store.delete(KEY_EVERY + key.slice(KEY_DEADLINE.length))
+  }
+}
+
 async function stop($: EngineInterface, s: State, why: string | null, forgetAlways = false) {
   s.deadline = 0
   s.every = PING_AFTER_MS
   s.stopped = why
   disarm(s)
-  await $.store.set(KEY_DEADLINE, 0)
-  await $.store.delete(KEY_EVERY)
+  await $.store.delete(deadlineKey(s))
+  await $.store.delete(everyKey(s))
   if (forgetAlways) {
     s.always = false
     await $.store.delete(KEY_ALWAYS)
@@ -206,17 +230,17 @@ async function ping($: EngineInterface, s: State) {
 async function startWindow($: EngineInterface, s: State, windowMs: number, every: number) {
   const now = await $.clock.now()
   s.every = every
-  if (every === PING_AFTER_MS) await $.store.delete(KEY_EVERY)
-  else await $.store.set(KEY_EVERY, every)
+  if (every === PING_AFTER_MS) await $.store.delete(everyKey(s))
+  else await $.store.set(everyKey(s), every)
   s.deadline = now + windowMs
   s.stopped = null
-  await $.store.set(KEY_DEADLINE, s.deadline)
+  await $.store.set(deadlineKey(s), s.deadline)
   await arm($, s)
 }
 
 function card(s: State, now: number): string {
   const lines: string[] = []
-  lines.push(`cache-tax · ${s.lastModel ?? 'model not seen yet'}`)
+  lines.push(`${s.lastModel ?? 'model not seen yet'}`)
   if (s.compacted) lines.push('state       reset by compaction, waiting for the first turn')
   else if (!s.lastRequestAt) lines.push('state       no request yet this session')
   else if (isCold(s, now)) lines.push(`state       COLD, last request ${fmtDuration(now - s.lastRequestAt)} ago`)
@@ -236,7 +260,7 @@ function card(s: State, now: number): string {
 
 export function freshState(): State {
   return {
-    deadline: 0, every: PING_AFTER_MS, always: false, lastRequestAt: 0, lastModel: null, ctx: 0, compacted: false,
+    sid: '', deadline: 0, every: PING_AFTER_MS, always: false, lastRequestAt: 0, lastModel: null, ctx: 0, compacted: false,
     guard: 'refuse', ackedAt: 0, coldWritePending: false, misses: [], pending: null, last: null, stopped: null,
   }
 }
@@ -246,10 +270,12 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    const saved = await $.store.get(KEY_DEADLINE)
-    const savedEvery = await $.store.get(KEY_EVERY)
-    const savedGuard = await $.store.get(KEY_GUARD)
+    s.sid = await $.session.id()
     const now = await $.clock.now()
+    await prune($, s, now)
+    const saved = await $.store.get(deadlineKey(s))
+    const savedEvery = await $.store.get(everyKey(s))
+    const savedGuard = await $.store.get(KEY_GUARD)
     s.deadline = typeof saved === 'number' && saved > now ? saved : 0
     s.every = typeof savedEvery === 'number' && savedEvery >= MIN_PING_MS ? savedEvery : PING_AFTER_MS
     s.guard = savedGuard === 'warn' ? 'warn' : 'refuse'
@@ -273,7 +299,7 @@ export const register: Register = on => {
     // The hook form of cache-tax ships a /cache-tax:status skill; both installed means two guards.
     const commands = await $.command.list()
     if (commands.some(c => c.name === 'cache-tax:status')) {
-      $.ui.log('cache-tax: the hook form (cache-tax@claude-code-hooks) is also installed, so a cold send is warned about or refused twice. Uninstall it, or /cache-tax guard warn here.')
+      $.ui.log('the hook form (cache-tax@claude-code-hooks) is also installed, so a cold send is warned about or refused twice. Uninstall it, or /cache-tax guard warn here.')
     }
     $.ui.status(statusText(s, now))
     return r
@@ -285,11 +311,16 @@ export const register: Register = on => {
   on('classic.SessionStart', async ($, e, next) => {
     const r = await next(e)
     if (e.source === 'clear') {
+      await stop($, s, null)
+      s.stopped = null
       resetForClear(s)
+      s.sid = await $.session.id()
       $.ui.status(statusText(s, await $.clock.now()))
       return r
     }
     const line = seedFromResume(s, e, await $.clock.now())
+    // The resume payload may omit the model; without it the guard cannot price the cold write.
+    if (!s.lastModel) s.lastModel = await $.session.model()
     if (line) $.ui.log(line)
     return r
   })
@@ -347,7 +378,7 @@ export const register: Register = on => {
     const now = await $.clock.now()
     if (!isCold(s, now) || s.ctx < BIG_TOKENS) return next(e)
     if (s.guard === 'warn') {
-      $.ui.log(`cache-tax: ${guardText(s, now)} Sending anyway; keepwarm will hold the cache for ${fmtDuration(AUTO_WARM_MS)} once it lands.`)
+      $.ui.log(`${guardText(s, now)} Sending anyway; keepwarm will hold the cache for ${fmtDuration(AUTO_WARM_MS)} once it lands.`)
       s.coldWritePending = true
       return next(e)
     }
@@ -390,7 +421,7 @@ export const register: Register = on => {
         s.misses.push({ at: now, tokens: write, usd })
         if (s.deadline < now + AUTO_WARM_MS) {
           await startWindow($, s, AUTO_WARM_MS, s.every)
-          $.ui.log(`cache-tax: cold write of ${fmtTok(write)} tokens paid (${fmtUsd(usd)}). Keeping the cache warm for ${fmtDuration(AUTO_WARM_MS)} so it is not paid again today; /keepwarm off to stop.`)
+          $.ui.log(`cold write of ${fmtTok(write)} tokens paid (${fmtUsd(usd)}). Keeping the cache warm for ${fmtDuration(AUTO_WARM_MS)} so it is not paid again today; /keepwarm off to stop.`)
         }
       }
     }

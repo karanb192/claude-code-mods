@@ -4,18 +4,20 @@ The [cache-tax hook](https://github.com/karanb192/claude-code-hooks/tree/main/pl
 
 **It stops you once.** Press Enter on a session whose 1-hour cache has lapsed and whose context is over 50k tokens, and the message is dropped before anything is sent, with the price on screen. Press Enter on the same message again and it goes through. One deliberate payment instead of an accidental one. `/cache-tax guard warn` turns that into a price shown while the message sends, which is what the hook does by default.
 
-**It keeps the cache warm for a window you set.** `/keepwarm 6h` arms a timer that re-arms on every model request; after 50 idle minutes it sends one tool-less fork over the session's own transcript, which the server answers from cache, refreshing the hour. A ping costs one cache read, about five cents on 200k tokens, against $4.00 for the re-write. It stops itself the moment a ping reads cold. After you pay a cold write, guarded or not, it arms this for you for three hours so the same session is not paid for twice in a day.
+**It keeps the cache warm for a window you set.** `/keepwarm` arms a six-hour timer (`/keepwarm 90m` for your own window, `/keepwarm always` to arm one at every session start) that re-arms on every model request; after 50 idle minutes it sends one tool-less fork over the session's own transcript, which the server answers from cache, refreshing the hour. A ping costs one cache read, about five cents on 200k tokens, against $4.00 for the re-write. It stops itself the moment a ping reads cold. After you pay a cold write, guarded or not, it arms this for you for three hours so the same session is not paid for twice in a day.
 
-**It keeps score.** `/cache-tax` shows warm or cold, context size, the cold price, keepwarm state, the guard mode, and this session's cold writes with their total.
+**It keeps score.** `/cache-tax` shows warm or cold, context size, the cold price, the break-even (how many pings cost one cold write, and how much idle that covers), keepwarm state, the guard mode, and this session's cold writes with their total.
 
 Why a mod. A settings hook cannot run on a timer, cannot send a model call, and receives no token counts, so the hook guesses the cache state from the transcript's timestamps and missed compactions until 1.0.2. The mod gets each request's time on `turn.step`, the live context size on `turn.complete`, the compaction itself on `session.compact`, and a `/clear` through the classic SessionStart seam, after which nothing priced before it still exists. Nothing here reads a file.
 
 ## Commands
 
-    /keepwarm 6h            keep warm for six hours (also 90m, 2h30m)
-    /keepwarm 6h every 2m   same, pinging every two minutes; a testing knob, floor 1m, forgotten after this window
+    /keepwarm               keep warm for six hours
+    /keepwarm 90m           keep warm for a window of your own (also 2h30m, 6h)
+    /keepwarm always        arm a six-hour window at every session start, remembered across sessions
+    /keepwarm 6h every 2m   pinging every two minutes; a testing knob, floor 1m, forgotten after this window
     /keepwarm status        the line the status slot shows
-    /keepwarm off           stop, forget the window
+    /keepwarm off           stop, forget the window, and turn always off
     /cache-tax              the card
     /cache-tax guard warn   show the price and send (the hook's default)
     /cache-tax guard refuse drop a cold send once, the resend goes through (this mod's default)
@@ -35,7 +37,7 @@ The hook and the mod share a name and a job, so having both means two guards on 
 Validated on Claude Code 2.1.272 and 2.1.273:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, command.run{command=keepwarm}, command.run{command=cache-tax}, prompt.submit, turn.step, turn.complete, session.compact
-    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.list, $.command.register, $.model.fork (via ping), $.session.usage, $.store.delete (via startWindow, stop), $.store.get, $.store.set, $.ui.log, $.ui.status
+    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.list, $.command.register, $.model.fork (via ping), $.session.usage, $.store.delete, $.store.get, $.store.set, $.ui.log, $.ui.status
 
 Reach L2, drives Claude. Sees every prompt you type, every model request's timing and every answer's token counts.
 
@@ -48,7 +50,7 @@ Reach L2, drives Claude. Sees every prompt you type, every model request's timin
 
 ## Cost and the plan-limit question
 
-Prices are the list table shared with the hook, where Fable 5.1 reads at $0.25 and writes the 1h tier at $20 per million tokens. On an API key the arithmetic is plain. A ping is a read, a comeback after the lapse is a write, and 80 pings cost one write. On a subscription the dollars are a yardstick, not the bill, and how a cache read weighs against the 5-hour and weekly limits is not documented anywhere I could find. Watch the rate-limit row of your status line during the first window.
+Prices are the list table, where Fable 5.1 reads at $0.25, writes the 1h tier at $20 and answers at $50 per million tokens; Sonnet 5 has its own row ($0.20, $4, $10). On an API key the arithmetic is plain. A ping is a read plus whatever the model says back, and the ping figure in the status slot counts both, since a fork takes no output cap and a model at high effort may think before it says "warm". A comeback after the lapse is a write, and on Fable 5.1 80 pings cost one write; the card prints that break-even for the model you are on. On a subscription the dollars are a yardstick, not the bill, and how a cache read weighs against the 5-hour and weekly limits is not documented anywhere I could find. Watch the rate-limit row of your status line during the first window.
 
 ## Limits
 
@@ -85,4 +87,4 @@ Watch the status slot after a minute. `last ping read 20k $0.01` with a read clo
 
 ## Tests and typecheck
 
-`claude plugin test plugins/cache-tax` runs eighteen tests on the mock clock: the refusal and the resend, slash commands and warm and small sends passing, warn mode, a paid cold write scored and arming keepwarm, context taken from the live window rather than a turn's summed usage, /clear forgetting everything, an unguarded full miss scored, silence after a compaction, the resume seeding, the both-forms notice, and the keepwarm cases from 0.1. For types, run `/plugin-types` inside a session in this folder, then `npx -p typescript tsc -p .`. Never commit `.claude/types/`.
+`claude plugin test plugins/cache-tax` runs twenty-three tests on the mock clock: the bare command and the always switch, output tokens in the ping figure with Sonnet 5 priced as itself, the break-even line, the refusal and the resend, slash commands and warm and small sends passing, warn mode, a paid cold write scored and arming keepwarm, context taken from the live window rather than a turn's summed usage, /clear forgetting everything, an unguarded full miss scored, silence after a compaction, the resume seeding, the both-forms notice, and the keepwarm cases from 0.1. For types, run `/plugin-types` inside a session in this folder, then `npx -p typescript tsc -p .`. Never commit `.claude/types/`.

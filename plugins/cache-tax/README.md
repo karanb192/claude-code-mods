@@ -4,7 +4,7 @@ The [cache-tax hook](https://github.com/karanb192/claude-code-hooks/tree/main/pl
 
 **It stops you once.** Press Enter on a session whose 1-hour cache has lapsed and whose context is over 50k tokens, and the message is dropped before anything is sent, with the price on screen. Press Enter on the same message again and it goes through. One deliberate payment instead of an accidental one. `/cache-tax guard warn` turns that into a price shown while the message sends, which is what the hook does by default.
 
-**It keeps the cache warm for a window you set.** `/keepwarm` arms a six-hour timer (`/keepwarm 90m` for your own window, `/keepwarm always` to arm one at every session start) that re-arms on every model request; after 50 idle minutes it sends one tool-less fork over the session's own transcript, which the server answers from cache, refreshing the hour. A ping costs one cache read, about five cents on 200k tokens, against $4.00 for the re-write. It stops itself the moment a ping reads nothing or writes more than a tenth of what it read. After you pay a cold write, guarded or not, it arms this for you for three hours.
+**It keeps the cache warm for a window you set.** `/keepwarm` arms a six-hour timer (`/keepwarm 90m` for your own window, `/keepwarm always` to arm one at every session start) that re-arms on every model request; after 50 idle minutes it sends one tool-less fork over the session's own transcript, which the server answers from cache, refreshing the hour. A ping costs a cache read plus whatever it sends and the model says back, which a fork cannot cap: about five cents on 200k tokens when the answer is one word, against $4.00 for the re-write. It stops itself the moment a ping reads nothing or writes at least a tenth of what it read. After you pay a cold write, guarded or not, it arms this for you for three hours.
 
 **It keeps score.** `/cache-tax` shows warm or cold, context size, the cold price, the break-even (how many pings cost one cold write, and how much idle that covers), keepwarm state, the guard mode, and this session's cold writes with their total.
 
@@ -36,14 +36,14 @@ The hook and the mod share a name and a job, so having both means two guards on 
 
 Validated on Claude Code 2.1.272 and 2.1.273:
 
-    ❯ Validating hooks: /Users/karanbansal/GitHub/.worktrees/ccm-product/plugins/cache-tax/hooks/hooks.json
+    ❯ ./register.ts hooks: session.start, classic.SessionStart, command.run{command=keepwarm}, command.run{command=cache-tax}, prompt.submit, turn.step, turn.complete, session.compact
     ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.list, $.command.register, $.model.fork (via ping), $.session.usage, $.store.delete (via startWindow, stop), $.store.get, $.store.set, $.ui.log, $.ui.status
 
 Reach L2, drives Claude. Sees every prompt you type, every model request's timing and every answer's token counts.
 
     Threat model for cache-tax (reach L2, drives Claude)
     1. Reads:    of each prompt, whether it starts with a slash and nothing else (the text is passed on untouched, never kept, never logged); the time; the token counts and model id the engine already holds on turn.complete and on the fork's reply; the resume fields Claude Code computes for settings hooks; the command list once at start; four values from its own $.store
-    2. Runs:     one $.model.fork per idle stretch inside a keepwarm window, one per ping period (50 minutes unless the testing knob set it, floor 1 minute), never outside the window, never after a readback that read nothing or wrote more than a tenth of what it read
+    2. Runs:     one $.model.fork per idle stretch inside a keepwarm window, one per ping period (50 minutes unless the testing knob set it, floor 1 minute), never outside the window, never after a readback that read nothing or wrote at least a tenth of what it read
     3. Sends:    nothing leaves the machine except the fork, an API request over the session's own transcript with a fixed one-line prompt
     4. Persists: the keepwarm deadline, the ping period, the always switch and the guard mode in $.store; the session's cold-write tally lives in memory and dies with the session
     5. Hostile input: the only text it parses is the argument of its two commands, matched against a duration regex and five literals; of the prompt text only the first non-blank character is inspected, for a slash; tool results and files never reach a branch; the fork's prompt is a constant, so nothing crafted can be sent through it; a refusal only ever drops the user's own message, and the resend is unconditional; if a hook throws, the engine skips it and the message enters unguarded, with one dim line
@@ -78,7 +78,7 @@ Then from this marketplace:
 
 ## Prove it on your own session
 
-The mock-clock tests prove the timer, the guard and the scoring, not that a fork hits the main cache. One ping proves that, and it costs one cache read. In any warm session:
+The mock-clock tests prove the timer, the guard and the scoring, not that a fork hits the main cache. One ping proves that, and it costs a cache read plus the answer. In any warm session:
 
     > Reply with one word: ready
     > /keepwarm 1h every 1m
@@ -87,4 +87,4 @@ Watch the status slot after a minute. `last ping read 20k $0.01` with a read clo
 
 ## Tests and typecheck
 
-`claude plugin test plugins/cache-tax` runs twenty-six tests on the mock clock: the bare command, the always switch seeded with a stale window and a testing knob, a partial write and a zero read stopping the loop while a ping's own few tokens do not, output and uncached input in the ping figure with Sonnet 5 priced as itself, the break-even line, the refusal and the resend, slash commands and warm and small sends passing, warn mode, a paid cold write scored and arming keepwarm, context taken from the live window rather than a turn's summed usage, /clear forgetting everything, an unguarded full miss scored, silence after a compaction, the resume seeding, the both-forms notice, and the keepwarm cases from 0.1. For types, run `/plugin-types` inside a session in this folder, then `npx -p typescript tsc -p .`. Never commit `.claude/types/`.
+`claude plugin test plugins/cache-tax` runs twenty-six tests on the mock clock: the bare command, the always switch seeded with a stale window and a testing knob, a partial write and a zero read stopping the loop while a ping's own small write does not, output and uncached input in the ping figure with Sonnet 5 priced as itself, the break-even line, the refusal and the resend, slash commands and warm and small sends passing, warn mode, a paid cold write scored and arming keepwarm, context taken from the live window rather than a turn's summed usage, /clear forgetting everything, an unguarded full miss scored, silence after a compaction, the resume seeding, the both-forms notice, and the keepwarm cases from 0.1. For types, run `/plugin-types` inside a session in this folder, then `npx -p typescript tsc -p .`. Never commit `.claude/types/`.

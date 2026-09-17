@@ -194,7 +194,7 @@ async function ping($: EngineInterface, s: State) {
   if (reply === null) return stop($, s, 'the engine did not send the ping, either the snapshot was cold or the API call failed')
   const u = reply.usage
   const price = priceOf(s.lastModel)
-  // A warm ping reads the prefix and writes only its own few tokens; a write past a tenth of the read means the prefix broke.
+  // A warm ping reads the prefix and writes only its own message; a write of a tenth of the read or more means the prefix broke.
   const warm = u.cache_read_input_tokens > 0 && u.cache_creation_input_tokens < 0.1 * u.cache_read_input_tokens
   const usd = price ? pingUsd(u, price) : null
   s.last = { at: now, read: u.cache_read_input_tokens, write: u.cache_creation_input_tokens, usd, warm }

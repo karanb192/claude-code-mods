@@ -47,7 +47,7 @@ export type State = {
 }
 
 function priceOf(model: string | null): [number, number, number] | null {
-  const m = (model ?? '').toLowerCase()
+  const m = (model ?? '').toLowerCase().replace(/[\s.]+/g, '-')
   for (const [family, read, write, output] of PRICES) if (m.includes(family)) return [read, write, output]
   return null
 }
@@ -62,6 +62,7 @@ export function fmtDuration(ms: number): string {
   const total = Math.max(0, Math.round(ms / 60000))
   const h = Math.floor(total / 60)
   const m = total % 60
+  if (h >= 48) return `${Math.floor(h / 24)}d ${h % 24}h`
   return h > 0 ? `${h}h${String(m).padStart(2, '0')}m` : `${m}m`
 }
 
@@ -164,12 +165,14 @@ function everyKey(s: State): string {
   return `${KEY_EVERY}:${s.sid}`
 }
 
-/** Drops every session's dead window, and the bare keys a store written before 2.1.1 still holds. */
+const PRUNE_AFTER_MS = 7 * 24 * 60 * 60 * 1000
+
+/** Drops windows dead for a week, and the bare keys a store written before 2.1.1 still holds. A week's grace keeps a delete from racing another session's renewal of a window that only just lapsed. */
 async function prune($: EngineInterface, now: number) {
   for (const key of await $.store.keys()) {
     if (key !== KEY_DEADLINE && !key.startsWith(`${KEY_DEADLINE}:`)) continue
     const deadline = await $.store.get(key)
-    if (typeof deadline === 'number' && deadline > now) continue
+    if (typeof deadline === 'number' && deadline > 0 && deadline > now - PRUNE_AFTER_MS) continue
     await $.store.delete(key)
     await $.store.delete(KEY_EVERY + key.slice(KEY_DEADLINE.length))
   }
@@ -310,11 +313,16 @@ export const register: Register = on => {
   on('classic.SessionStart', async ($, e, next) => {
     const r = await next(e)
     if (e.source === 'clear') {
+      await stop($, s, null)
+      s.stopped = null
       resetForClear(s)
+      s.sid = await $.session.id()
       $.ui.status(statusText(s, await $.clock.now()))
       return r
     }
     const line = seedFromResume(s, e, await $.clock.now())
+    // The resume payload may omit the model; without it the guard cannot price the cold write.
+    if (!s.lastModel) s.lastModel = await $.session.model()
     if (line) $.ui.log(line)
     return r
   })

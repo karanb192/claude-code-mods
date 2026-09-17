@@ -32,7 +32,7 @@ type ForkAnswer = null | { read: number; write: number; out?: number; input?: nu
 
 // The world beneath the mod: its store, the engine's answers, and a fork that
 // replies from a script so each test decides what the cache looked like.
-function world(on: On, forkAnswers: ForkAnswer[], opts: { store?: Map<string, unknown>; commands?: string[]; live?: { tokens?: number }; sid?: string } = {}) {
+function world(on: On, forkAnswers: ForkAnswer[], opts: { store?: Map<string, unknown>; commands?: string[]; live?: { tokens?: number }; sid?: string; model?: string } = {}) {
   if (opts.store) {
     const store = opts.store
     on('store.get', ($, e) => ({ value: store.get(e.key) }))
@@ -46,6 +46,7 @@ function world(on: On, forkAnswers: ForkAnswer[], opts: { store?: Map<string, un
   const entered: string[] = []
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: opts.sid ?? 'S1' }))
+  on('session.model', () => ({ value: opts.model ?? 'claude-fable-5-1' }))
   on('session.usage', () => ({ value: { context: { window: 1000000, tokens: opts.live?.tokens }, rateLimits: [] } }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('command.list', () => ({ value: (opts.commands ?? []).map(name => ({ name, description: '', source: 'plugin' as const })) }))
@@ -75,6 +76,7 @@ describe('parse and format', () => {
     expect(parseDuration('soon')).toBe(null)
     expect(fmtDuration(150 * MIN)).toBe('2h30m')
     expect(fmtDuration(7 * MIN)).toBe('7m')
+    expect(fmtDuration((15 * 24 + 9) * 60 * MIN)).toBe('15d 9h')
   })
 })
 
@@ -419,7 +421,7 @@ describe('keepwarm', () => {
     await $.session.start(session)
     await $.turn.complete(turn())
     const card = await $.command.run(run('cache-tax', ''))
-    expect(card.text).toMatch(/break-even  up to 80 pings at the read rate cost one cold write, about 66h40m of idle at one ping per 50m/)
+    expect(card.text).toMatch(/break-even  up to 80 pings at the read rate cost one cold write, about 2d 18h of idle at one ping per 50m/)
   })
 
   test('subagent turns do not touch the timer', async ($, on) => {
@@ -462,6 +464,15 @@ describe('store per session', () => {
     expect(w.forks.length).toBe(1)
   })
 
+  test('a window that lapsed less than a week ago is left for its own session', async ($, on) => {
+    const now = START + 30 * 24 * HOUR
+    mock.clock(on, { now })
+    const store = new Map<string, unknown>([['deadline:recent', now - HOUR], ['every:recent', MIN]])
+    world(on, [], { store, sid: 'mine' })
+    await $.session.start(session)
+    expect([...store.keys()]).toEqual(['deadline:recent', 'every:recent'])
+  })
+
   test('/keepwarm off deletes only this session\'s keys', async ($, on) => {
     mock.clock(on, { now: START })
     const store = new Map<string, unknown>([['deadline:other', START + HOUR], ['every:other', MIN], ['always', true], ['guard', 'warn']])
@@ -482,7 +493,7 @@ describe('store per session', () => {
   test('stale windows are pruned on start, live ones and the global switches stay', async ($, on) => {
     mock.clock(on, { now: START })
     const store = new Map<string, unknown>([
-      ['deadline:old1', START - MIN], ['every:old1', MIN],
+      ['deadline:old1', START - 8 * 24 * HOUR], ['every:old1', MIN],
       ['deadline:old2', 0],
       ['deadline', 0], ['every', MIN],
       ['deadline:live', START + HOUR], ['every:live', 2 * MIN],

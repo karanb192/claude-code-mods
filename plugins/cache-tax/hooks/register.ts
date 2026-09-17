@@ -29,6 +29,7 @@ type Miss = { at: number; tokens: number; usd: number | null }
 type GuardMode = 'refuse' | 'warn'
 
 export type State = {
+  sid: string
   deadline: number
   every: number
   always: boolean
@@ -152,13 +153,35 @@ function disarm(s: State) {
   s.pending = null
 }
 
+// The window and its ping period belong to the session that armed them, so a
+// second session, or one resumed from another transcript, never inherits them
+// and cannot turn them off. The always switch and the guard mode stay global.
+function deadlineKey(s: State): string {
+  return `${KEY_DEADLINE}:${s.sid}`
+}
+
+function everyKey(s: State): string {
+  return `${KEY_EVERY}:${s.sid}`
+}
+
+/** Drops every session's dead window, and the bare keys a store written before 2.1.1 still holds. */
+async function prune($: EngineInterface, now: number) {
+  for (const key of await $.store.keys()) {
+    if (key !== KEY_DEADLINE && !key.startsWith(`${KEY_DEADLINE}:`)) continue
+    const deadline = await $.store.get(key)
+    if (typeof deadline === 'number' && deadline > now) continue
+    await $.store.delete(key)
+    await $.store.delete(KEY_EVERY + key.slice(KEY_DEADLINE.length))
+  }
+}
+
 async function stop($: EngineInterface, s: State, why: string | null, forgetAlways = false) {
   s.deadline = 0
   s.every = PING_AFTER_MS
   s.stopped = why
   disarm(s)
-  await $.store.set(KEY_DEADLINE, 0)
-  await $.store.delete(KEY_EVERY)
+  await $.store.delete(deadlineKey(s))
+  await $.store.delete(everyKey(s))
   if (forgetAlways) {
     s.always = false
     await $.store.delete(KEY_ALWAYS)
@@ -206,11 +229,11 @@ async function ping($: EngineInterface, s: State) {
 async function startWindow($: EngineInterface, s: State, windowMs: number, every: number) {
   const now = await $.clock.now()
   s.every = every
-  if (every === PING_AFTER_MS) await $.store.delete(KEY_EVERY)
-  else await $.store.set(KEY_EVERY, every)
+  if (every === PING_AFTER_MS) await $.store.delete(everyKey(s))
+  else await $.store.set(everyKey(s), every)
   s.deadline = now + windowMs
   s.stopped = null
-  await $.store.set(KEY_DEADLINE, s.deadline)
+  await $.store.set(deadlineKey(s), s.deadline)
   await arm($, s)
 }
 
@@ -236,7 +259,7 @@ function card(s: State, now: number): string {
 
 export function freshState(): State {
   return {
-    deadline: 0, every: PING_AFTER_MS, always: false, lastRequestAt: 0, lastModel: null, ctx: 0, compacted: false,
+    sid: '', deadline: 0, every: PING_AFTER_MS, always: false, lastRequestAt: 0, lastModel: null, ctx: 0, compacted: false,
     guard: 'refuse', ackedAt: 0, coldWritePending: false, misses: [], pending: null, last: null, stopped: null,
   }
 }
@@ -246,10 +269,12 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    const saved = await $.store.get(KEY_DEADLINE)
-    const savedEvery = await $.store.get(KEY_EVERY)
-    const savedGuard = await $.store.get(KEY_GUARD)
+    s.sid = await $.session.id()
     const now = await $.clock.now()
+    await prune($, now)
+    const saved = await $.store.get(deadlineKey(s))
+    const savedEvery = await $.store.get(everyKey(s))
+    const savedGuard = await $.store.get(KEY_GUARD)
     s.deadline = typeof saved === 'number' && saved > now ? saved : 0
     s.every = typeof savedEvery === 'number' && savedEvery >= MIN_PING_MS ? savedEvery : PING_AFTER_MS
     s.guard = savedGuard === 'warn' ? 'warn' : 'refuse'

@@ -490,7 +490,7 @@ describe('store per session', () => {
     expect(store.get('guard')).toBe('warn')
   })
 
-  test('stale windows are pruned on start, live ones and the global switches stay', async ($, on) => {
+  test('legacy bare keys are cleared on start; other sessions\' keys, live or dead, and the global switches stay', async ($, on) => {
     mock.clock(on, { now: START })
     const store = new Map<string, unknown>([
       ['deadline:old1', START - 8 * 24 * HOUR], ['every:old1', MIN],
@@ -501,6 +501,14 @@ describe('store per session', () => {
     ])
     world(on, [], { store, sid: 'mine' })
     await $.session.start(session)
-    expect([...store.keys()]).toEqual(['deadline:live', 'every:live', 'guard'])
+    expect([...store.keys()]).toEqual(['deadline:old1', 'every:old1', 'deadline:old2', 'deadline:live', 'every:live', 'guard'])
+  })
+
+  test('this session\'s own dead window is cleared on start', async ($, on) => {
+    mock.clock(on, { now: START })
+    const store = new Map<string, unknown>([['deadline:mine', START - MIN], ['every:mine', MIN], ['deadline:other', START - MIN], ['every:other', MIN]])
+    world(on, [], { store, sid: 'mine' })
+    await $.session.start(session)
+    expect([...store.keys()]).toEqual(['deadline:other', 'every:other'])
   })
 })

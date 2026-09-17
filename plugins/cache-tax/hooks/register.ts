@@ -165,14 +165,12 @@ function everyKey(s: State): string {
   return `${KEY_EVERY}:${s.sid}`
 }
 
-const PRUNE_AFTER_MS = 7 * 24 * 60 * 60 * 1000
-
-/** Drops windows dead for a week, and the bare keys a store written before 2.1.1 still holds. A week's grace keeps a delete from racing another session's renewal of a window that only just lapsed. */
-async function prune($: EngineInterface, now: number) {
-  for (const key of await $.store.keys()) {
-    if (key !== KEY_DEADLINE && !key.startsWith(`${KEY_DEADLINE}:`)) continue
+/** Clears this session's own dead window and the bare keys a store written before 2.1.1 still holds. Other sessions' keys are never touched: a read followed by a delete cannot be made atomic against their renewal. */
+async function prune($: EngineInterface, s: State, now: number) {
+  for (const key of [KEY_DEADLINE, deadlineKey(s)]) {
     const deadline = await $.store.get(key)
-    if (typeof deadline === 'number' && deadline > 0 && deadline > now - PRUNE_AFTER_MS) continue
+    if (deadline === undefined) continue
+    if (typeof deadline === 'number' && deadline > now) continue
     await $.store.delete(key)
     await $.store.delete(KEY_EVERY + key.slice(KEY_DEADLINE.length))
   }
@@ -274,7 +272,7 @@ export const register: Register = on => {
     const r = await next(e)
     s.sid = await $.session.id()
     const now = await $.clock.now()
-    await prune($, now)
+    await prune($, s, now)
     const saved = await $.store.get(deadlineKey(s))
     const savedEvery = await $.store.get(everyKey(s))
     const savedGuard = await $.store.get(KEY_GUARD)

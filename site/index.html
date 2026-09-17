@@ -9,12 +9,12 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23113d33'/><text x='16' y='23' font-family='Menlo,monospace' font-size='20' font-weight='600' text-anchor='middle' fill='%23cfe4da'>$</text></svg>">
 <meta property="og:type" content="website">
 <meta property="og:title" content="claude-code-mods: Claude Mods with their footprints printed">
-<meta property="og:description" content="Three Claude Mods, each with the validator's own list of what it hooks and reaches. cache-tax prices a cold send and keeps the prompt cache warm for two cents a ping.">
+<meta property="og:description" content="Two Claude Mods and the skill that builds them, each with the validator's own list of what it hooks and reaches. cache-tax prices a cold send and keeps the prompt cache warm for a window you set; a ping read 75k tokens for two cents on a 74k-token Sonnet 5 session.">
 <meta property="og:url" content="https://claude-code-mods.karanbansal.in/">
 <meta property="og:image" content="https://hooks.karanbansal.in/brand/cache-tax-social-1280x640.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="claude-code-mods: Claude Mods with their footprints printed">
-<meta name="twitter:description" content="cache-tax prices a cold send and keeps the prompt cache warm for two cents a ping. fable-pin pins subagents to one model. mod-builder plans a mod before writing it.">
+<meta name="twitter:description" content="cache-tax prices a cold send and keeps the prompt cache warm for a window you set, one cache-shared ping per idle stretch. fable-pin pins subagents to one model. mod-builder plans a mod before writing it.">
 <meta name="twitter:image" content="https://hooks.karanbansal.in/brand/cache-tax-social-1280x640.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -70,16 +70,16 @@ footer{margin-top:64px;color:var(--muted);font-size:13px;max-width:70ch}
 claude plugin install cache-tax@claude-code-mods
 claude plugin install fable-pin@claude-code-mods
 claude plugin install mod-builder@claude-code-mods<button data-copy="i1">Copy</button></pre>
-<p class="flag">Mods are early access. Nothing loads unless <code>CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1</code> is set, and the API can change between releases. To turn it on for every session, merge <code>{ "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }</code> into <code>~/.claude/settings.json</code>; that loads the hooks module of every installed plugin that ships one. For one session, prefix the command: <code>CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude</code>.</p>
+<p class="flag">Mods are early access. No hooks module loads unless <code>CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1</code> is set, and the API can change between releases. The mod-builder skill is instructions only and needs no flag. To turn it on for every session, merge <code>{ "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }</code> into <code>~/.claude/settings.json</code>; that loads the hooks module of every installed plugin that ships one. For one session, prefix the command: <code>CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude</code>.</p>
 
 <h2 id="mods">The mods</h2>
 <div class="cards">
 
 <article class="card featured" id="cache-tax">
   <div class="row"><h3>cache-tax</h3><span class="kind">mod · reach L2, drives Claude</span></div>
-  <p>The comeback price of a cold prompt cache, shown before you pay it, and a way to never pay it. Claude Code's 1-hour cache dies after an hour of silence; the next message then re-writes the whole context at 80x the read rate on Fable 5.1 ($20 against $0.25 per million tokens). cache-tax drops that message once with the price on screen, keeps the cache warm for a window you set with one cache-shared ping per idle stretch, and keeps score of what cold writes cost this session.</p>
+  <p>The comeback price of a cold prompt cache, shown before you pay it, and a way to stop paying it while you are around. Claude Code's 1-hour cache dies after an hour of silence; the next message then re-writes the whole context at 80x the read rate on Fable 5.1 ($20 against $0.25 per million tokens). When the cache is cold and the context is over 50k tokens, cache-tax drops that message once with the price on screen and the resend goes through. For a window you set it keeps the cache warm with one cache-shared ping per idle stretch, and it keeps score of what cold writes cost this session. A model or effort switch, an edited CLAUDE.md or a changed tool list breaks the cache regardless of time, and the next message pays.</p>
   <img class="hero-img" src="https://hooks.karanbansal.in/brand/cache-tax-social-1280x640.png" alt="cache-tax: read $0.25 per million tokens, write $20, 80x" width="1280" height="640" loading="lazy">
-  <div class="quote">cache-tax: the prompt cache went cold 3h00m ago. Sending this re-writes 200,502 tokens at $20/MTok = <b>$4.01</b> (a warm turn would have cost $0.05). Send it again to pay it, and keepwarm will then hold the cache for 3h00m. Or /clear and start from a note.</div>
+  <div class="quote">cache-tax: the prompt cache went cold 2h00m ago. Sending this re-writes 200,502 tokens at $20/MTok = <b>$4.01</b> (a warm turn would have cost $0.05). Send it again to pay it, and keepwarm will then hold the cache for 3h00m. Or /clear and start from a note.</div>
   <div class="cmds">/keepwarm               keep warm for six hours
 /keepwarm 90m           a window of your own
 /keepwarm always        arm six hours at every session start
@@ -87,10 +87,10 @@ claude plugin install mod-builder@claude-code-mods<button data-copy="i1">Copy</b
 /cache-tax              the card: state, context, cold price, break-even, cold writes paid
 /cache-tax guard warn   show the price and send instead of refusing once</div>
   <dl class="meta">
-    <dt>Keep-warm</dt><dd>After 50 idle minutes, one tool-less fork over the session's own transcript refreshes the hour for one cache read. Every ping reads its usage back and the first cold one stops the loop. Receipt from a real session: 74k context, every ping read 75k tokens and wrote 0.</dd>
+    <dt>Keep-warm</dt><dd>After 50 idle minutes, one tool-less fork over the session's own transcript refreshes the hour for the price of a cache read plus the few tokens it sends and says back. Every ping reads its usage back, and the loop stops the first time a ping reads nothing or writes more than a tenth of what it read. Receipt from a real session on Sonnet 5: 74k context, every ping read 75k tokens, wrote 0, $0.02.</dd>
     <dt>Hooks</dt><dd><code>session.start, classic.SessionStart, command.run{command=keepwarm}, command.run{command=cache-tax}, prompt.submit, turn.step, turn.complete, session.compact</code></dd>
-    <dt>Calls</dt><dd><code>$.clock.after, $.clock.now, $.command.list, $.command.register, $.model.fork, $.session.usage, $.store.delete, $.store.get, $.store.set, $.ui.log, $.ui.status</code></dd>
-    <dt>Reach</dt><dd><span class="track"><i class="on l0"></i><i class="on l1"></i><i class="on l2"></i><i></i></span>L2, drives Claude. No files, no processes, no network. Sees every prompt you type, every model request's timing and every answer's token counts.</dd>
+    <dt>Calls</dt><dd><code>$.clock.after (via arm), $.clock.now, $.command.list, $.command.register, $.model.fork (via ping), $.session.usage, $.store.delete (via startWindow, stop), $.store.get, $.store.set, $.ui.log, $.ui.status</code></dd>
+    <dt>Reach</dt><dd><span class="track"><i class="on l0"></i><i class="on l1"></i><i class="on l2"></i><i></i></span>L2, drives Claude. No files, no processes, no direct network call; the only thing that leaves the machine is the ping, one request to the model API over your own session. Sees every prompt you type, every model request's timing and every answer's token counts.</dd>
     <dt>Two forms</dt><dd>The <a href="https://github.com/karanb192/claude-code-hooks/tree/main/plugins/cache-tax">hook form</a> needs no flag and works in any Claude Code today: it warns with the price, refuses once with a setting, and powers a status-line row. The mod is the same tool where the API allows more.</dd>
   </dl>
   <div class="links">
@@ -125,7 +125,7 @@ claude plugin install mod-builder@claude-code-mods<button data-copy="i1">Copy</b
     <dt>Reach</dt><dd>A skill is instructions, not process code, so it has no footprint of its own. It runs <code>claude plugin validate</code> and the bundled <code>footprint.mjs</code> on the mod it is building.</dd>
   </dl>
   <div class="links">
-    <a href="https://github.com/karanb192/claude-code-mods/tree/main/plugins/mod-builder">README and the skill's reference files</a>
+    <a href="https://github.com/karanb192/claude-code-mods/tree/main/plugins/mod-builder/skills/mod-builder">SKILL.md and its reference files</a>
   </div>
 </article>
 

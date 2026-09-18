@@ -470,6 +470,46 @@ describe('keepwarm', () => {
     expect(w.forks.length).toBe(1)
   })
 
+  test('a cold window expires and its testing period does not reach the next auto-window', async ($, on) => {
+    const clock = mock.clock(on, { now: START })
+    const store = new Map<string, unknown>()
+    const w = world(on, [warm], { store })
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await clock.advance(2 * HOUR)
+    await $.command.run(run('keepwarm', '90m every 1m'))
+    await clock.advance(90 * MIN)
+    expect(w.forks.length).toBe(0)
+    expect(store.has('deadline:S1')).toBe(false)
+    expect(store.has('every:S1')).toBe(false)
+    expect(w.status.at(-1)).toBe(undefined)
+    expect((await $.command.run(run('keepwarm', 'status'))).text).toBe('keepwarm is off')
+    await $.turn.complete(turn({ usage: usage({ cache_read_input_tokens: 0, cache_creation_input_tokens: 200000 }) }))
+    await clock.advance(49 * MIN)
+    expect(w.forks.length).toBe(0)
+    await clock.advance(MIN)
+    expect(w.forks.length).toBe(1)
+  })
+
+  test('a turn after sleep clears the expired period before the overdue timer runs', async ($, on) => {
+    let now = START
+    on('clock.now', () => ({ value: now }))
+    on('clock.after', () => new Promise<{ value: void }>(() => {}))
+    const store = new Map<string, unknown>()
+    const w = world(on, [], { store })
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    now += 2 * HOUR
+    await $.command.run(run('keepwarm', '90m every 1m'))
+    now += 91 * MIN
+    expect(store.get('every:S1')).toBe(MIN)
+    await $.turn.complete(turn({ usage: usage({ cache_read_input_tokens: 0, cache_creation_input_tokens: 200000 }) }))
+    expect(store.has('every:S1')).toBe(false)
+    expect(store.get('deadline:S1')).toBe(now + 3 * HOUR)
+    expect(w.status.at(-1)).toBe('keepwarm 3h00m left · ping in 50m')
+    expect(w.forks.length).toBe(0)
+  })
+
   test('subagent turns do not touch the timer', async ($, on) => {
     const clock = mock.clock(on, { now: START })
     const w = world(on, [warm])

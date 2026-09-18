@@ -197,10 +197,12 @@ async function arm($: EngineInterface, s: State) {
   if (!s.deadline) return
   const now = await $.clock.now()
   if (now >= s.deadline) return stop($, s, null)
-  // A ping onto a cold cache would pay the cold write itself; the window stays armed and the next turn re-arms it.
+  // A cold window still needs expiry cleanup, but must not send a model request.
   if (s.lastRequestAt && !s.compacted && !isCold(s, now)) {
-    const delay = Math.max(1000, s.lastRequestAt + s.every - now)
+    const delay = Math.min(s.deadline - now, Math.max(1000, s.lastRequestAt + s.every - now))
     s.pending = $.clock.after(delay, () => { void ping($, s) })
+  } else {
+    s.pending = $.clock.after(s.deadline - now, () => { void arm($, s) })
   }
   $.ui.status(statusText(s, now))
 }
@@ -413,6 +415,8 @@ export const register: Register = on => {
     const r = await next(e)
     if (e.agentId) return r
     const now = await $.clock.now()
+    // A sleeping host may deliver this turn before the expired window's timer.
+    if (s.deadline && now >= s.deadline) await stop($, s, null)
     // turn.step stamps the exact request time; when no step of this turn did, the turn's end is the floor.
     if (now - s.lastRequestAt > e.durationMs) s.lastRequestAt = now
     s.compacted = false

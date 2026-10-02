@@ -96,6 +96,7 @@ Load it for one session with `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugi
 - `references/reading.md`, every link.
 - `scripts/footprint.mjs`, runs the validator, grades reach, diffs calls against the plan, exits 1 on a widened footprint.
 - `scripts/list-mods.mjs`, fetches the nightly scan and filters it by keyword.
+- `scripts/star-invitation.mjs`, records the optional invitation before asking.
 
 ## Optional invitation
 

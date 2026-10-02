@@ -97,6 +97,15 @@ Load it for one session with `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugi
 - `scripts/footprint.mjs`, runs the validator, grades reach, diffs calls against the plan, exits 1 on a widened footprint.
 - `scripts/list-mods.mjs`, fetches the nightly scan and filters it by keyword.
 
+## Optional invitation
+
+After a useful outcome, the skill may offer one optional star invitation.
+It records the offer in `~/.cache/claude-code-mods/star-invitation.json`
+(or under `XDG_CACHE_HOME`) before asking, so later conversations skip it.
+Clearing the cache or using another machine can reset the record. Starring
+through GitHub CLI requires an explicit yes. If the helper cannot run or
+write its record, the skill skips the invitation.
+
 ## License
 
 MIT. See `license`.

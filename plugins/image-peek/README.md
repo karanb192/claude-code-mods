@@ -2,7 +2,7 @@
 
 Move the text cursor onto a pasted `[Image #1]` marker to see its image. Move away to hide it. Wide windows get a large preview pane with the image centered on a dark canvas. Narrow windows use the area above the prompt. Keyboard focus stays in the prompt.
 
-This first version targets macOS and Ghostty with Claude Code 2.1.287 or later. Cursor selection, native paste, reload and cleanup have been exercised in the actual Claude CLI. User-provided screenshots confirmed image rendering in Ghostty in both layouts. **The latest sizing adjustment still needs a visual check.**
+This first version targets macOS and Ghostty with Claude Code 2.1.287 or later. Cursor selection, native paste, reload and cleanup have been exercised in the actual Claude CLI. A user-provided Ghostty screenshot confirms the large image and dark preview canvas.
 
 ## Install
 
@@ -32,6 +32,8 @@ claude --plugin-dir ./plugins/image-peek
 This follows the text cursor, not mouse hover. The conversation remains visible beside or above the preview. The whole image fits within the available width and height, reserving one row for its label. The pane requests up to about 72% of the window's width, adjusted for the image's proportions. Claude may retain a width you previously chose; drag the divider if that makes the pane too narrow.
 
 The inline fallback is smaller because Claude limits the above-prompt area to roughly half the terminal height, including the prompt and other bottom content. There is no zoom or floating overlay. Closing the pane dismisses it until the cursor leaves the marker.
+
+Claude draws the pane's outer frame using its own theme. A Light Claude theme in a dark terminal leaves bright strips around the dark canvas. Choose Dark in Claude's `/theme` menu to make the surrounding frame dark too; this changes all Claude UI colors. Image Peek does not change your theme.
 
 `/image-peek off` stops new captures and hides the preview. `/image-peek on` resumes capture for new pastes. `/image-peek` reports the current setting. These commands do not call a model.
 
@@ -73,7 +75,7 @@ Tests cover cursor boundaries, separate captures, ambiguous pastes, typed marker
 
 A controlled layout probe in the actual CLI used the same 180-column, 48-row terminal for both surfaces. The inline area settled at 15 rows and fitted a landscape image into 50 by 14 cells. A requested 128-column pane provided a 128 by 40 cell body and fitted that image into 126 by 34 cells. This verifies available layout space, not rendered pixels or colors.
 
-The remaining visual check is to paste two distinct images in Ghostty, select each marker, resize the window, and confirm the larger dark preview appears and disappears without moving keyboard focus. Repeat with conversation output above the prompt. On reload, the plugin closes any pane left from its earlier layout.
+For a full interaction check, paste two distinct images in Ghostty, select each marker, resize the window, and confirm the larger dark preview appears and disappears without moving keyboard focus. Repeat with conversation output above the prompt. On reload, the plugin closes any pane left from its earlier layout.
 
 ## Threat model
 

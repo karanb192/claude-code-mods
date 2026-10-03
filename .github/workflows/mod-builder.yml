@@ -1,0 +1,23 @@
+name: mod-builder scripts
+
+on:
+  push:
+    paths:
+      - 'plugins/mod-builder/**'
+      - '.github/workflows/mod-builder.yml'
+  pull_request:
+    paths:
+      - 'plugins/mod-builder/**'
+      - '.github/workflows/mod-builder.yml'
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # The live section of the suite needs a real `claude` at or above the floor;
+      # on this runner it prints a skip line and the offline section still has to pass.
+      - run: node --test 'plugins/mod-builder/skills/mod-builder/tests/*.test.mjs'

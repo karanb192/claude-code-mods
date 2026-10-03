@@ -12,12 +12,18 @@
       "source": "./plugins/image-peek",
       "description": "Preview pasted images at their prompt markers on macOS. Ghostty, plus experimental iTerm2 and Herdr support with a startup override. Reach L2: local clipboard capture and temporary files, no model or network calls.",
       "category": "development",
-      "tags": ["mods", "images", "clipboard", "ghostty", "macos"]
+      "tags": [
+        "mods",
+        "images",
+        "clipboard",
+        "ghostty",
+        "macos"
+      ]
     },
     {
       "name": "mod-builder",
       "source": "./plugins/mod-builder",
-      "description": "A skill that plans, writes, validates and reviews a Claude Mod. Every idea must justify each process, file, network, model or UI capability it requests: plan first, smallest $ surface, validator output pasted, a five-line threat model. A brainstorm mode checks ideas against every mod already on GitHub.",
+      "description": "A skill that plans, writes, validates, proves, reviews, migrates and publishes Claude Code mods. Plan first with the smallest $ surface, a footprint diffed against the plan, a test seen failing, an isolated load that leaves evidence files, a five-line threat model, and a handoff that names what was and was not proven. Brainstorm mode checks ideas against every mod already on GitHub.",
       "category": "development",
       "tags": [
         "mods",

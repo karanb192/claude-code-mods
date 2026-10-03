@@ -1,4 +1,6 @@
-# written by /plugin-types inside a plugin folder; version-specific, never committed
+# Claude Code writes a plugin's type declarations into .claude-plugin/types/ on every load;
+# that folder carries its own .gitignore, but a stray copy from an older build layout is excluded too.
+.claude-plugin/types/
 .claude/types/
 node_modules/
 .DS_Store

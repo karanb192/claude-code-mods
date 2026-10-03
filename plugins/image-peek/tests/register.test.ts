@@ -21,6 +21,7 @@ function world(on: Parameters<TestBody>[1], terminal = 'ghostty') {
   const logs: string[] = [];
   let captures = 0;
   let captureFails = false;
+  let cleanupFails = false;
   let placed = true;
   on('session.start', (_, e) => ({ cwd: e.cwd }));
   on('session.id', () => ({ value: sessionId }));
@@ -29,6 +30,7 @@ function world(on: Parameters<TestBody>[1], terminal = 'ghostty') {
   on('state.set', (_, e) => { state = JSON.parse(JSON.stringify(e.value)); return { value: { isSet: true, version: 1 } }; });
   on('process.run', (_, e) => {
     processes.push([...e.argv]);
+    if (cleanupFails && e.argv.includes('cleanup')) throw new Error('Cleanup unavailable');
     let stdout = 'Darwin\n';
     if (e.argv.includes('capture')) {
       captures++;
@@ -50,6 +52,7 @@ function world(on: Parameters<TestBody>[1], terminal = 'ghostty') {
     draft: (text: string, cursor = text.length) => { draft = { text, cursor }; },
     state: () => state,
     captureFails: () => { captureFails = true; },
+    cleanupFails: () => { cleanupFails = true; },
     narrow: () => { placed = false; },
   };
 }
@@ -159,5 +162,33 @@ describe('image-peek', () => {
     await w.clock.advance(240);
     expect(w.processes.filter(argv => argv.includes('capture'))).toHaveLength(1);
     await ui.unmount();
+  });
+
+  test('continues after clear even when cache cleanup fails', async ($, on) => {
+    const w = world(on);
+    await $.session.start(start);
+    w.draft('[Image #1]');
+    await w.clock.advance(120);
+    w.cleanupFails();
+    await $.session.end({ reason: 'clear', sessionId, resume: { id: sessionId } });
+    expect(w.state()?.images).toEqual({});
+    expect(w.logs).toContain('Image Peek could not remove its temporary preview files.');
+    w.draft('[Image #1]');
+    await w.clock.advance(120);
+    expect(w.state()?.images['1']?.path).toBe('/tmp/image-2.png');
+  });
+
+  test('does not recapture an old marker after its preview is evicted', async ($, on) => {
+    const w = world(on);
+    await $.session.start(start);
+    for (let id = 1; id <= 25; id++) {
+      w.draft(`[Image #${id}]`);
+      await w.clock.advance(120);
+    }
+    expect(Object.keys(w.state()!.images)).toHaveLength(24);
+    w.draft('[Image #1]');
+    await w.clock.advance(120);
+    expect(w.state()?.images['1']).toBeUndefined();
+    expect(w.processes.filter(argv => argv.includes('capture'))).toHaveLength(25);
   });
 });

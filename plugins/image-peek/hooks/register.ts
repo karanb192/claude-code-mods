@@ -7,7 +7,7 @@ const PANE = 'image-peek';
 const LIMIT = 24;
 
 function blank(sessionId = ''): PreviewSession {
-  return { sessionId, images: {}, observed: [], enabled: true };
+  return { sessionId, images: {}, observed: [], enabled: true, highestNativeId: 0 };
 }
 
 function imageResult(text: string): PreviewImage | null {
@@ -20,83 +20,94 @@ function imageResult(text: string): PreviewImage | null {
   } catch { return null; }
 }
 
-  let session = blank();
-  let active: string | null = null;
-  let docked = false;
-  let busy = false;
-  let ready = false;
-  let generation = 0;
-  let dismissed: string | null = null;
-  let lastDraft = '';
-  let lastCursor = -1;
-  let failed = false;
+let session = blank();
+let active: string | null = null;
+let docked = false;
+let busy = false;
+let ready = false;
+let generation = 0;
+let dismissed: string | null = null;
+let lastDraft = '';
+let lastCursor = -1;
+let failed = false;
 
-  async function save($: EngineInterface) {
-    await $.state.set(STATE, session);
+async function save($: EngineInterface) {
+  await $.state.set(STATE, session);
+}
+
+async function close($: EngineInterface) {
+  active = null;
+  docked = false;
+  await $.ui.close({ id: PANE });
+  $.ui.invalidate('ui.render');
+}
+
+async function cleanup($: EngineInterface, id: string) {
+  try {
+    await $.process.run(['/usr/bin/osascript', '-l', 'JavaScript', `${$.plugin.root}/hooks/clipboard.js`, 'cleanup', id], { timeoutMs: 3000 });
+  } catch {
+    $.ui.log('Image Peek could not remove its temporary preview files.');
   }
+}
 
-  async function close($: EngineInterface) {
-    active = null;
+async function reset($: EngineInterface) {
+  generation++;
+  const ending = session.sessionId;
+  session = blank();
+  dismissed = null;
+  lastDraft = '';
+  lastCursor = -1;
+  try { await close($); await save($); }
+  finally { if (ending) await cleanup($, ending); }
+}
+
+async function update($: EngineInterface) {
+  if (!ready || busy) return;
+  busy = true;
+  const epoch = generation;
+  try {
+    if (!session.sessionId) {
+      session = blank(await $.session.id());
+      await save($);
+    }
+    const draft = await $.prompt.read();
+    if (draft.text === lastDraft && draft.cursor === lastCursor) return;
+    const textChanged = draft.text !== lastDraft;
+    lastDraft = draft.text;
+    lastCursor = draft.cursor;
+    const ids = [...new Set(markers(draft.text).map(marker => marker.id))];
+    const fresh = ids.filter(id => !session.observed.includes(id) && !(id in session.images)
+      && Number(id) > session.highestNativeId);
+    session.observed = ids;
+    for (const id of fresh) session.highestNativeId = Math.max(session.highestNativeId, Number(id));
+    for (const id of fresh) session.images[id] = null;
+    if (session.enabled && fresh.length === 1) {
+      const capturedSession = session.sessionId;
+      const result = await $.process.run(['/usr/bin/osascript', '-l', 'JavaScript', `${$.plugin.root}/hooks/clipboard.js`, 'capture', capturedSession], { timeoutMs: 3000 });
+      if (epoch !== generation) { await cleanup($, capturedSession); return; }
+      session.images[fresh[0]!] = result.exitCode === 0 ? imageResult(result.stdout) : null;
+    }
+    const keys = Object.keys(session.images);
+    for (const id of keys.slice(0, Math.max(0, keys.length - LIMIT))) delete session.images[id];
+    if (textChanged || fresh.length) await save($);
+    const current = await $.prompt.read();
+    if (epoch !== generation) return;
+    const id = session.enabled ? selectedImage(current.text, current.cursor) : null;
+    if (id !== dismissed) dismissed = null;
+    if (id === active || (id !== null && id === dismissed)) return;
+    if (!id) { await close($); return; }
+    active = id;
     docked = false;
-    await $.ui.close({ id: PANE });
+    const opened = await $.ui.open({ id: PANE, title: `Image #${id}`, columns: 64 });
+    if (epoch !== generation) return;
+    docked = opened.isPlaced;
     $.ui.invalidate('ui.render');
-  }
-
-  async function reset($: EngineInterface) {
-    generation++;
-    const ending = session.sessionId;
-    session = blank();
-    dismissed = null;
-    lastDraft = '';
-    lastCursor = -1;
+  } catch {
     await close($);
-    await save($);
-    if (ending) await $.process.run(['/usr/bin/osascript', '-l', 'JavaScript', `${$.plugin.root}/hooks/clipboard.js`, 'cleanup', ending]);
-  }
-
-  async function update($: EngineInterface) {
-    if (!ready || busy) return;
-    busy = true;
-    const epoch = generation;
-    try {
-      if (!session.sessionId) {
-        session = blank(await $.session.id());
-        await save($);
-      }
-      const draft = await $.prompt.read();
-      if (draft.text === lastDraft && draft.cursor === lastCursor) return;
-      lastDraft = draft.text;
-      lastCursor = draft.cursor;
-      const ids = [...new Set(markers(draft.text).map(marker => marker.id))];
-      const fresh = ids.filter(id => !session.observed.includes(id) && !(id in session.images));
-      session.observed = ids;
-      for (const id of fresh) session.images[id] = null;
-      if (session.enabled && fresh.length === 1) {
-        const result = await $.process.run(['/usr/bin/osascript', '-l', 'JavaScript', `${$.plugin.root}/hooks/clipboard.js`, 'capture', session.sessionId]);
-        if (epoch !== generation) return;
-        session.images[fresh[0]!] = result.exitCode === 0 ? imageResult(result.stdout) : null;
-      }
-      const keys = Object.keys(session.images);
-      for (const id of keys.slice(0, Math.max(0, keys.length - LIMIT))) delete session.images[id];
-      if (draft.text !== '' || fresh.length) await save($);
-      const current = await $.prompt.read();
-      if (epoch !== generation) return;
-      const id = session.enabled ? selectedImage(current.text, current.cursor) : null;
-      if (id !== dismissed) dismissed = null;
-      if (id === active || (id !== null && id === dismissed)) return;
-      if (!id) { await close($); return; }
-      active = id;
-      docked = false;
-      const opened = await $.ui.open({ id: PANE, title: `Image #${id}`, columns: 64 });
-      if (epoch !== generation) return;
-      docked = opened.isPlaced;
-      $.ui.invalidate('ui.render');
-    } catch {
-      await close($);
-      if (!failed) $.ui.log('Image preview is unavailable. Paste the image again, or use /image-peek off.');
-      failed = true;
-    } finally { busy = false; }
-  }
+    if (!failed) $.ui.log('Image preview is unavailable. Paste the image again, or use /image-peek off.');
+    failed = true;
+  } finally { busy = false; }
+}
 
 function draw($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt', 'terminal'>) {
   const { Box, Text, Image } = $.ui.resolve(e);
@@ -126,10 +137,11 @@ export const register: Register = on => {
     }
     const id = await $.session.id();
     const stored = (await $.state.get(STATE)).value;
-    session = stored?.sessionId === id ? stored : blank(id);
+    session = stored?.sessionId === id ? JSON.parse(JSON.stringify(stored)) : blank(id);
     const draft = await $.prompt.read();
     for (const marker of markers(draft.text)) {
       if (!(marker.id in session.images)) session.images[marker.id] = null;
+      session.highestNativeId = Math.max(session.highestNativeId, Number(marker.id));
     }
     await save($);
     ready = true;
@@ -172,7 +184,10 @@ export const register: Register = on => {
   on('session.end', async ($, e, next) => {
     const running = ready;
     ready = false;
-    if (running) await reset($);
+    if (running) {
+      try { await reset($); }
+      catch { $.ui.log('Image Peek could not finish preview cleanup.'); }
+    }
     const result = await next(e);
     ready = running && (e.reason === 'clear' || e.reason === 'resume');
     return result;
@@ -181,10 +196,14 @@ export const register: Register = on => {
   on('session.compact', async ($, e, next) => {
     const running = ready;
     ready = false;
-    const result = await next(e);
-    if (running) await reset($);
-    ready = running;
-    return result;
+    try {
+      const result = await next(e);
+      if (running) {
+        try { await reset($); }
+        catch { $.ui.log('Image Peek could not finish preview cleanup.'); }
+      }
+      return result;
+    } finally { ready = running; }
   });
 
   on('ui.close', { id: PANE }, ($, e, next) => {

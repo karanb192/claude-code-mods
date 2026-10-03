@@ -9,6 +9,7 @@ export type PreviewSession = {
   images: Record<string, PreviewImage | null>;
   observed: string[];
   enabled: boolean;
+  highestNativeId: number;
 };
 
 declare module 'claude-code' {

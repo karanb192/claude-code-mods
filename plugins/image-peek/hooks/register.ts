@@ -22,11 +22,9 @@ function imageResult(text: string): PreviewImage | null {
 
 let session = blank();
 let active: string | null = null;
-let docked = false;
 let busy = false;
 let ready = false;
 let generation = 0;
-let dismissed: string | null = null;
 let lastDraft = '';
 let lastCursor = -1;
 let failed = false;
@@ -37,8 +35,6 @@ async function save($: EngineInterface) {
 
 async function close($: EngineInterface) {
   active = null;
-  docked = false;
-  await $.ui.close({ id: PANE });
   $.ui.invalidate('ui.render');
 }
 
@@ -54,7 +50,6 @@ async function reset($: EngineInterface) {
   generation++;
   const ending = session.sessionId;
   session = blank();
-  dismissed = null;
   lastDraft = '';
   lastCursor = -1;
   try { await close($); await save($); }
@@ -93,14 +88,9 @@ async function update($: EngineInterface) {
     const current = await $.prompt.read();
     if (epoch !== generation) return;
     const id = session.enabled ? selectedImage(current.text, current.cursor) : null;
-    if (id !== dismissed) dismissed = null;
-    if (id === active || (id !== null && id === dismissed)) return;
+    if (id === active) return;
     if (!id) { await close($); return; }
     active = id;
-    docked = false;
-    const opened = await $.ui.open({ id: PANE, title: `Image #${id}`, columns: 64 });
-    if (epoch !== generation) return;
-    docked = opened.isPlaced;
     $.ui.invalidate('ui.render');
   } catch {
     await close($);
@@ -109,16 +99,14 @@ async function update($: EngineInterface) {
   } finally { busy = false; }
 }
 
-function draw($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt', 'terminal'>) {
+function draw($: EngineInterface, e: RenderInput<'AbovePrompt', 'terminal'>) {
   const { Box, Text, Image } = $.ui.resolve(e);
   const entry = active ? session.images[active] : null;
   const columns = Math.max(1, e.props.bodyColumns - 2);
-  const rows = e.component === 'AbovePrompt'
-    ? Math.max(1, Math.min(14, e.props.maxRows - 1))
-    : Math.max(1, (e.props.scroll.bodyRows || (e.viewport?.rows ?? 30) - 6) - 1);
+  const rows = Math.max(1, Math.min(18, e.props.maxRows - 1));
   if (!entry) return Text({ dimColor: true, children: `Image #${active} · Preview unavailable. Paste it again to preview.` });
   const size = fitImage(entry.width, entry.height, columns, rows);
-  return Box({ flexDirection: 'column', alignItems: 'center', children: [
+  return Box({ flexDirection: 'column', alignItems: 'flex-start', flexShrink: 0, children: [
     Text({ dimColor: true, children: `Image #${active} · ${entry.width} × ${entry.height}` }),
     Image({ key: `image-${active}`, source: { file: entry.path, format: 'png' }, ...size, alt: `Image #${active} preview requires Ghostty image support` }),
   ] });
@@ -138,6 +126,7 @@ export const register: Register = on => {
     const id = await $.session.id();
     const stored = (await $.state.get(STATE)).value;
     session = stored?.sessionId === id ? JSON.parse(JSON.stringify(stored)) : blank(id);
+    await $.ui.close({ id: PANE });
     const draft = await $.prompt.read();
     for (const marker of markers(draft.text)) {
       if (!(marker.id in session.images)) session.images[marker.id] = null;
@@ -206,27 +195,8 @@ export const register: Register = on => {
     } finally { ready = running; }
   });
 
-  on('ui.close', { id: PANE }, ($, e, next) => {
-    if (e.origin.kind === 'person') {
-      dismissed = active;
-      active = null;
-      docked = false;
-      $.ui.invalidate('ui.render');
-    }
-    return next(e);
-  });
-
-  on('ui.render', { component: 'Pane', requestId: PANE }, ($, e, next) => {
-    if (!active || e.surface !== 'terminal') return next(e);
-    if (!docked) { docked = true; $.ui.invalidate('ui.render'); }
-    return draw($, e);
-  });
-
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (!active || e.surface !== 'terminal' || e.props.hasSurvey || e.props.maxRows < 2) return next(e);
-    const panes = await $.ui.panes();
-    docked = panes.some(pane => pane.id === PANE && pane.isPlaced);
-    if (docked) return next(e);
     const other = await next(e);
     const { Box } = $.ui.resolve(e);
     return Box({ flexDirection: 'column', children: [other, draw($, e)] });

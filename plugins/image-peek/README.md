@@ -1,8 +1,8 @@
 # Image Peek
 
-Move the text cursor onto a pasted `[Image #1]` marker to see its image. Move away to hide it. The preview opens beside the conversation when there is room, or above the prompt in a narrow window. Keyboard focus stays in the prompt.
+Move the text cursor onto a pasted `[Image #1]` marker to see its image. Move away to hide it. The preview sits directly above the prompt, aligned with its left edge, and uses only the rows its image needs. Keyboard focus stays in the prompt.
 
-This first version targets macOS and Ghostty with Claude Code 2.1.287 or later. Cursor selection, native paste, reload and cleanup have been exercised in the actual Claude CLI. **Image pixels have not yet been visually verified in Ghostty.**
+This first version targets macOS and Ghostty with Claude Code 2.1.287 or later. Cursor selection, native paste, reload and cleanup have been exercised in the actual Claude CLI. Image rendering in Ghostty was confirmed in a user-provided screenshot of the initial side-pane layout. **The revised above-prompt layout still needs a visual check.**
 
 ## Install
 
@@ -29,7 +29,7 @@ claude --plugin-dir ./plugins/image-peek
 2. Use the arrow keys to put the text cursor inside or directly beside its `[Image #N]` marker. The preview appears automatically.
 3. Move into the surrounding text to hide it. Return to the marker to see the same cached image.
 
-This follows the text cursor, not mouse hover. Existing conversation output stays in place. The entire image is fitted to the available area; there is no zoom or floating overlay. Closing the preview pane keeps it dismissed until the cursor leaves that marker.
+This follows the text cursor, not mouse hover. The conversation remains visible above the preview. The entire image is fitted to the available width and at most 18 image rows; shorter images use fewer rows. There is no zoom, floating overlay or full-height side panel.
 
 `/image-peek off` stops new captures and hides the preview. `/image-peek on` resumes capture for new pastes. `/image-peek` reports the current setting. These commands do not call a model.
 
@@ -59,8 +59,8 @@ The strict validator on Claude Code 2.1.287 reported:
 ```text
   ❯ types ./types/index.d.ts declares on $: nothing (no EngineInterface member)
   ❯ types ./types/index.d.ts declares state: image-peek.session
-  ❯ ./register.ts hooks: session.start, prompt.edit, prompt.fill, command.run{command=image-peek}, session.end, session.compact, ui.close{id=image-peek}, ui.render{component=Pane, requestId=image-peek}, ui.render{component=AbovePrompt}
-  ❯ ./register.ts calls: $.clock.every, $.command.register, $.env.get, $.process.run, $.prompt.read, $.session.id, $.state.get, $.state.set (via save), $.ui.close (via close), $.ui.invalidate, $.ui.log, $.ui.open (via update), $.ui.panes, $.ui.resolve
+  ❯ ./register.ts hooks: session.start, prompt.edit, prompt.fill, command.run{command=image-peek}, session.end, session.compact, ui.render{component=AbovePrompt}
+  ❯ ./register.ts calls: $.clock.every, $.command.register, $.env.get, $.process.run, $.prompt.read, $.session.id, $.state.get, $.state.set (via save), $.ui.close, $.ui.invalidate (via close, update), $.ui.log, $.ui.resolve
   ❯ ./register.ts env writes: nothing
   ❯ ./register.ts env reads: GHOSTTY_RESOURCES_DIR, TERM_PROGRAM
   ❯ ./register.ts state writes: image-peek.session
@@ -69,7 +69,7 @@ The strict validator on Claude Code 2.1.287 reported:
 
 Tests cover cursor boundaries, separate captures, ambiguous pastes, typed marker substitutes, unsupported terminals, enable/disable, failed capture, cache eviction and cleanup failure. A live CLI check also exercised native image paste, leaving and returning to the marker, hot reload and normal-exit cleanup. That terminal rendered the Image element's alternative text, so it did not verify image pixels. No model turn was submitted during these checks.
 
-The remaining visual check is to paste two distinct images in Ghostty, select each marker, resize across the side-pane threshold, and confirm the correct image appears and disappears without moving keyboard focus. Repeat with conversation output above the prompt.
+The remaining visual check is to paste two distinct images in Ghostty, select each marker, resize the window, and confirm the compact preview appears and disappears without moving keyboard focus. Repeat with conversation output above the prompt. On reload, the plugin closes any pane left from its earlier layout.
 
 ## Threat model
 

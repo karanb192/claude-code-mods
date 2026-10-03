@@ -1,0 +1,8 @@
+{
+  "name": "image-peek",
+  "version": "0.1.0",
+  "description": "Preview a pasted image when the cursor reaches its prompt marker. macOS and Ghostty, Claude Code 2.1.287 or later.",
+  "author": { "name": "Karan Bansal" },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

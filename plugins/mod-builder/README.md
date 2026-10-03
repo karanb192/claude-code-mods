@@ -23,7 +23,7 @@ The mod's files in the folder you name (or `./<name>/`), never in Claude Code's 
 
 ## Stages that need a login
 
-The proof harness runs a separate Claude Code with its own config folder, so it never touches your real `~/.claude`. Some stages need that separate config to be logged in once.
+The proof harness runs a separate Claude Code with its own config folder, so it never writes to your real `~/.claude` (it only reads it to check that nothing changed). One stage, and sometimes a second, needs that separate config to be logged in once.
 
 | Stage | Needs a login | Needs tmux |
 |---|---|---|
@@ -31,9 +31,9 @@ The proof harness runs a separate Claude Code with its own config folder, so it 
 | load (headless load, debug log) | no | no |
 | typecheck (against the generated types) | no | no |
 | test (`claude plugin test`) | no | no |
-| command (runs the mod's slash command headlessly) | yes | no |
+| command (runs the mod's slash command headlessly) | only when the command's hook reaches the model | no |
 | interactive (scripted terminal session, screen captures) | yes | yes |
-| install-smoke (installs through a temporary marketplace) | yes | no |
+| install-smoke (installs through a temporary marketplace) | no | no |
 | isolation (checks nothing outside the run folder changed) | no | no |
 
 To log the harness in once:
@@ -42,7 +42,7 @@ To log the harness in once:
 CLAUDE_CONFIG_DIR=~/.cache/mod-builder/config claude auth login
 ```
 
-Without it, those three stages report `unverified (harness home not logged in ...)`. They never report a pass they did not earn.
+Without it, the interactive stage reports `unverified (harness home not logged in)`, and a command whose hook reaches the model reports `unverified (harness home not logged in: ...)`. Neither reports a pass it did not earn.
 
 ## The harness home
 

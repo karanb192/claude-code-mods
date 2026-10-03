@@ -12,6 +12,7 @@ import {
   FLOOR, LOG_PATTERNS, cmpVersion, diffApiMap, extractApiMap, findClaude, harnessHome, hashTree,
   matchLog, methodNames, parseValidateJson, readTypes, runClaude
 } from '../scripts/lib.mjs'
+import { driftLine as gateDriftLine, referencesLine as gateReferencesLine } from '../scripts/gate.mjs'
 
 after(() => H.cleanup())
 
@@ -369,6 +370,33 @@ describe('A: api-check.mjs', () => {
     assert.match(text, /; mod: 8 migrate$/m)
   })
 
+  it('--mod flags an untyped register in hooks modules, and early access or function hooks in a plugin.json description', () => {
+    const mod = H.writeFiles(H.tmpDir(), {
+      '.claude-plugin/plugin.json': '{\n  "name": "old",\n  "description": "A pane mod (early access)"\n}\n',
+      'hooks/register.js': 'export function register(on) {\n}\n',
+      'hooks/two.mjs': 'export async function register(on, options) {}\n',
+      'hooks/lib/three.ts': 'export function register( on ,opts ) {}\n',
+      'hooks/typed.ts': "import type { On } from 'claude-code'\nexport function register(on: On) {}\nexport function register(on, options: Options) {}\n",
+      'hooks/notes.md': 'export function register(on) {}\n',
+      'src/other.ts': 'export function register(on) {}\n',
+      '.gitignore': '.claude/types/\n'
+    })
+    const run = m => JSON.parse(H.runScript('api-check.mjs', ['--types', baselineTypes(), '--refs', path.join(H.tmpDir(), 'none'), '--skill', emptySkill(), '--mod', m, '--json']).stdout).migrate
+    const found = run(mod)
+    assert.deepEqual(found.map(m => `${m.id} ${m.file}:${m.line}`).sort(), [
+      'M.desc .claude-plugin/plugin.json:3', 'M.register hooks/lib/three.ts:1', 'M.register hooks/register.js:1', 'M.register hooks/two.mjs:1', 'M.tsconfig .gitignore:1'
+    ])
+    assert.equal(found.find(m => m.id === 'M.register').to, "import type { Register } from 'claude-code'; export const register: Register = (on, options) => ...")
+    const fh = H.writeFiles(H.tmpDir(), { '.claude-plugin/plugin.json': { name: 'x', description: 'Built on function hooks' } })
+    assert.deepEqual(run(fh).map(m => `${m.id} ${m.file}:${m.line}: ${m.old}`), ['M.desc .claude-plugin/plugin.json:3: function hooks'])
+  })
+
+  it('--help lists every MIGRATE id', () => {
+    const r = H.runScript('api-check.mjs', ['--help'])
+    assert.equal(r.code, 0)
+    for (const id of ['M.flag', 'M.types', 'M.tsconfig', 'M.resolve', 'M.npx', 'M.register', 'M.early', 'M.desc']) assert.match(r.stdout, new RegExp(`^  ${id.replace('.', '\\.')} `, 'm'))
+  })
+
   it('--write-baseline writes the live map to --baseline', () => {
     const out = path.join(H.tmpDir(), 'map.json')
     const r = H.runScript('api-check.mjs', ['--types', baselineTypes(), '--baseline', out, '--write-baseline', '--refs', path.join(H.tmpDir(), 'none'), '--skill', emptySkill()])
@@ -393,7 +421,14 @@ describe('A: gate.mjs (stub claude)', () => {
     const env = H.stubEnv(bin, { MOD_BUILDER_HOME: home, MOD_BUILDER_PROBE_DIR: H.probeModDir() })
     return { bin, home, env }
   }
-  const block = out => Object.fromEntries(out.split('\n').slice(1).map(l => l.match(/^ {2}([a-z ]+):\s+(.*)$/)).filter(Boolean).map(m => [m[1], m[2]]))
+  const block = out => Object.fromEntries(out.split('\n').slice(1).map(l => l.match(/^(?:! | {2})([a-z ]+):\s+(.*)$/)).filter(Boolean).map(m => [m[1], m[2]]))
+  const marked = out => out.split('\n').slice(1).filter(l => l.startsWith('! ')).map(l => l.match(/^! ([a-z ]+):/)[1])
+  // A PATH with the stub claude and node only: no tsc, no npx, no tmux.
+  const narrowPath = bin => {
+    const nodeDir = H.tmpDir()
+    fs.symlinkSync(process.execPath, path.join(nodeDir, path.basename(process.execPath)))
+    return `${bin}${path.delimiter}${nodeDir}`
+  }
 
   it('prints the block in order, generates types under the harness config, and proceeds', () => {
     const { bin, home, env } = setup()
@@ -404,18 +439,48 @@ describe('A: gate.mjs (stub claude)', () => {
     assert.deepEqual(Object.keys(block(r.stdout)), ['claude', 'mods load', 'types', 'baseline', 'drift', 'references', 'typescript', 'tmux', 'harness', 'verdict'])
     const b = block(r.stdout)
     assert.match(b.claude, /^2\.1\.288 \(PATH .*claude\); floor 2\.1\.287 met$/)
-    assert.equal(b['mods load'], 'yes (claude plugin test: no hooks module to load)')
-    assert.match(b.types, /types\/2\.1\.288\/claude-code\/index\.d\.ts \(written by 2\.1\.288, generated\)$/)
+    assert.equal(b['mods load'], 'yes (claude plugin test ran; it found no module there, as expected)')
+    assert.match(b.types, /types\/2\.1\.288 \(claude-code\/index\.d\.ts inside; written by 2\.1\.288, generated\)$/)
+    assert.ok(fs.existsSync(path.join(b.types.replace(/ \(.*$/, '').replace(/^~/, process.env.HOME), 'claude-code', 'index.d.ts')), 'the types line names a folder holding claude-code/index.d.ts')
     assert.equal(b.baseline, 'data/api-map.json stamped 2.1.287')
-    assert.match(b.harness, /\(login: no; run CLAUDE_CONFIG_DIR=.*config claude auth login for command and interactive stages\)$/)
+    assert.match(b.harness, /\(login: no; run CLAUDE_CONFIG_DIR=.*config claude auth login once for the interactive stage, or for a command whose hook reaches the model\)$/)
     assert.match(b.verdict, /^proceed/)
+    const flags = marked(r.stdout)
+    assert.ok(flags.includes('harness'), 'login: no needs attention')
+    for (const fine of ['claude', 'mods load', 'types', 'baseline', 'verdict']) assert.ok(!flags.includes(fine), `${fine} is fine and carries no marker`)
     assert.ok(fs.existsSync(path.join(home, 'types', '2.1.288', 'claude-code', 'index.d.ts')))
     const load = H.stubCalls(bin).find(c => c.args[0] === '-p')
     assert.equal(load.configDir, path.join(home, 'config'))
     assert.equal(load.flag, false)
     assert.ok(load.args.includes('--strict-mcp-config') && load.args.includes('--debug-file'))
     const again = H.runScript('gate.mjs', [], { env })
-    assert.match(block(again.stdout).types, /\(written by 2\.1\.288, cache\)$/)
+    assert.match(block(again.stdout).types, /\(claude-code\/index\.d\.ts inside; written by 2\.1\.288, cache\)$/)
+  })
+
+  it('marks every line that needs attention with "! " and lists the keys in --json attention', () => {
+    const { env } = setup()
+    const narrow = { ...env, PATH: narrowPath(env.PATH.split(path.delimiter)[0]) }
+    const r = H.runScript('gate.mjs', [], { env: narrow })
+    const b = block(r.stdout)
+    assert.equal(b.tmux, process.platform === 'win32' ? 'not on Windows (the interactive stage reads unverified)' : 'absent (do not pass --interactive to prove; it refuses with exit 2)')
+    assert.equal(b.typescript, 'none (no tsc and no npx; the typecheck stage will read unverified)')
+    const flags = marked(r.stdout)
+    for (const key of ['tmux', 'typescript', 'harness']) assert.ok(flags.includes(key), `${key} needs attention: ${r.stdout}`)
+    for (const line of r.stdout.trim().split('\n').slice(1)) assert.match(line, /^(! | {2})[a-z ]+: /)
+    const j = JSON.parse(H.runScript('gate.mjs', ['--json'], { env: narrow }).stdout)
+    assert.deepEqual(j.attention, flags)
+    assert.match(j.block, /^! tmux: +\S/m)
+  })
+
+  it('drift and references lines: additions and uncovered names alone carry no marker', () => {
+    const add = { sign: '+', name: 'ui.selection', family: 'op event' }
+    const base = { drift: [add, { sign: '+', name: '$.ui.selection', family: 'method' }], shapeDrift: [], stale: [], refs: { found: true }, uncovered: [{ name: 'ui.selection' }, { name: '$.ui.selection' }] }
+    assert.deepEqual(gateDriftLine(base), { line: '+1 op event (ui.selection), +1 method ($.ui.selection), 0 removed, 0 shape drift', ok: true })
+    assert.deepEqual(gateReferencesLine(base), { line: 'usable (0 stale, 2 uncovered: ui.selection, $.ui.selection)', ok: true })
+    assert.equal(gateDriftLine({ ...base, drift: [add, { sign: '-', name: '$.ui.blit', family: 'method' }] }).ok, false)
+    assert.equal(gateDriftLine({ ...base, shapeDrift: [{ id: 'budget.ms' }] }).ok, false)
+    assert.deepEqual(gateReferencesLine({ ...base, uncovered: [] }), { line: 'usable (0 stale, 0 uncovered)', ok: true })
+    assert.equal(gateReferencesLine({ ...base, stale: [{ name: '$.ui.blit' }] }).ok, false)
   })
 
   it('reports the drift a newer build adds', () => {
@@ -476,9 +541,12 @@ describe('A: gate.mjs (stub claude)', () => {
     const { env } = setup({ list: [{ id: 'clashy@some-mkt', enabled: true }] })
     const mod = H.writeFiles(H.tmpDir(), { '.claude-plugin/plugin.json': { name: 'clashy' }, 'hooks/hooks.json': { modules: ['./register.ts'] } })
     H.synthTypes(BASELINE, path.join(mod, '.claude-plugin', 'types'), { version: '2.1.288' })
-    const b = block(H.runScript('gate.mjs', [mod], { env }).stdout)
-    assert.match(b.types, /\.claude-plugin\/types\/claude-code\/index\.d\.ts \(written by 2\.1\.288, mod\)$/)
+    const out = H.runScript('gate.mjs', [mod], { env }).stdout
+    const b = block(out)
+    assert.match(b.types, /\.claude-plugin\/types \(claude-code\/index\.d\.ts inside; written by 2\.1\.288, mod\)$/)
     assert.equal(b['name clash'], 'clashy@some-mkt installed; --plugin-dir and the installed copy conflict: ask which one to test against')
+    assert.ok(marked(out).includes('name clash'))
+    assert.ok(!marked(H.runScript('gate.mjs', [mod], { env: setup().env }).stdout).includes('name clash'), 'no clash, no marker')
     assert.equal(b.details, 'clashy 0.0.1; always-on ~0 tok added to every session (claude plugin details)')
   })
 
@@ -763,7 +831,7 @@ describe('C: prove.mjs (stub claude)', () => {
     assert.equal(b.typecheck, 'ran and passed             evidence/tsc.txt (tsc 5.9.3)')
     assert.equal(b.test, 'ran and passed (2 pass, 0 fail)   evidence/test.txt')
     assert.equal(b.command, `unverified (harness home not logged in: run CLAUDE_CONFIG_DIR=${path.join(s.home, 'config')} claude auth login once)`)
-    assert.equal(b.interactive, 'not applicable (not requested)')
+    assert.equal(b.interactive, 'not applicable (draws nothing)')
     assert.equal(b['install-smoke'], 'not applicable (not requested)')
     assert.equal(b.isolation, 'ran and passed             source unchanged, no real config touched')
     assert.equal(b['ui evidence'], 'not applicable')
@@ -793,6 +861,21 @@ describe('C: prove.mjs (stub claude)', () => {
       assert.equal(c.cwd, run)
     }
     assert.ok(calls.some(c => c.args.join(' ') === `-p /demo-mod --plugin-dir ${path.join(run, 'mod')} --debug-file ${path.join(run, 'evidence', 'command.log')} --strict-mcp-config`))
+  })
+
+  it('reads interactive unverified for a mod that draws and no --interactive script', () => {
+    const notes = (hooks, calls) => ({ ...DEMO_VALIDATE, contents: [{ type: 'hooks', errors: [], warnings: [], notes: [`./register.ts hooks: ${hooks}`, `./register.ts calls: ${calls}`] }] })
+    const render = setup({ config: { validate: { 'demo-mod': notes('session.start, ui.render{component=AbovePrompt}', '$.ui.log') } } })
+    const r = prove(render)
+    assert.equal(r.code, 0, r.stdout + r.stderr)
+    assert.equal(block(r.stdout).interactive, 'unverified (the mod draws; no --interactive script was run)')
+    assert.equal(block(r.stdout)['ui evidence'], 'unverified (the mod draws; no --interactive script was run)')
+    const open = setup({ config: { validate: { 'demo-mod': notes('session.start', '$.ui.open, $.ui.log') } } })
+    assert.equal(block(prove(open).stdout).interactive, 'unverified (the mod draws; no --interactive script was run)')
+    const toast = setup({ config: { validate: { 'demo-mod': notes('session.start', '$.ui.toast') } } })
+    const t = block(prove(toast).stdout)
+    assert.equal(t.interactive, 'not applicable (no ui.render hook or $.ui.open call)')
+    assert.equal(t['ui evidence'], 'unverified (the mod draws; no --interactive script was run)')
   })
 
   it('reads not applicable with no test files and never calls plugin test on the mod', () => {

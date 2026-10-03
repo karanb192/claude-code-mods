@@ -9,9 +9,9 @@ node <skill>/scripts/prove.mjs <mod-dir> --plan '<Surface line>' [--env '<names>
   [--command <name>] [--interactive <script>] [--install] [--continue] [--json]
 ```
 
-Exit 0 all run stages passed, 1 a stage FAILED, 2 blocked (no `claude` at or above the floor, no `claude plugin test`, no TypeScript route, no tmux for `--interactive`, unusable harness home), 3 three strikes. Preconditions never skip silently. [src: scripts/prove.mjs | checked 2.1.288 | recheck: tests/scripts.test.mjs fails on an exit code]
+Exit 0 no stage FAILED (stages that read `unverified` or `not applicable` still exit 0), 1 a stage FAILED, 2 blocked (no `claude` at or above the floor, no `claude plugin test`, no TypeScript route, no tmux for `--interactive`, unusable harness home), 3 three strikes. Preconditions never skip silently. [src: scripts/prove.mjs | checked 2.1.288 | recheck: tests/scripts.test.mjs fails on an exit code]
 
-The harness home is `$MOD_BUILDER_HOME` or `~/.cache/mod-builder` (created 0700; refused when a symlink, owned by another user, or readable by group or others). Each run copies the mod to `<home>/runs/<yyyymmdd-hhmmss>-<name>/mod/` (without `.claude-plugin/types/`, `node_modules/`, `.git/`), records `source.sha256`, and writes `evidence/`, `status.txt` and `run.json`. Every child runs with `CLAUDE_CONFIG_DIR=<home>/config`, `--strict-mcp-config`, the early-access flag removed from its environment, and the run folder as its working directory, so the person's own config is never read or written. [src: scripts/prove.mjs | checked 2.1.288 | recheck: the isolation stage fails on a clean run]
+The harness home is `$MOD_BUILDER_HOME` or `~/.cache/mod-builder` (created 0700; refused when a symlink, owned by another user, or readable by group or others). Each run copies the mod to `<home>/runs/<yyyymmdd-hhmmss>-<name>/mod/` (without `.claude-plugin/types/`, `node_modules/`, `.git/`), records `source.sha256`, and writes `evidence/`, `status.txt` and `run.json`. Every child runs with `CLAUDE_CONFIG_DIR=<home>/config` and the early-access flag removed from its environment. Only the session runs (load, command, interactive and install-smoke's `-p ok`) also get `--strict-mcp-config` and the run folder as their working directory; `plugin validate`, `plugin test`, `plugin marketplace` and `plugin install` do not get the flag, the `plugin test --help` precondition runs in the harness home, and tsc runs in the mod copy. The person's own config is never written; prove.mjs reads `~/.claude.json`, `~/.claude/settings.json` and the `~/.claude/projects/` listing before and after the run for the isolation check. [src: scripts/prove.mjs | checked 2.1.288 | recheck: the isolation stage fails on a clean run]
 
 Only the interactive stage needs a model, so it needs one login to the harness home: `CLAUDE_CONFIG_DIR=<home>/config claude auth login`. Validate, load, typecheck, test, command and install-smoke need none: a `-p` load with no login still loads the mod, fires `session.start`, writes the types, and runs a `/command` the mod registered before it prints `Not logged in · Please run /login` and exits 1 (observed). A command whose hook itself reaches the model reads `unverified (harness home not logged in: ...)` instead. [src: observed | checked 2.1.288 | recheck: a no-login load stops writing types, or a no-login `-p "/cmd"` stops answering]
 
@@ -24,11 +24,11 @@ Only the interactive stage needs a model, so it needs one login to the harness h
 | typecheck | `tsc -p` (or `npx -y -p typescript tsc -p`) after the load wrote the types; a root tsconfig that does not extend the generated one is swapped in the run copy with a warning | exit 0 | `tsc.txt` |
 | test | `claude plugin test <run>/mod` | exit 0 and at least one pass; no test file reads `not applicable (no test files)` | `test.txt` |
 | command | when the footprint lists `command.run{command=X}` or `--command X`: `claude -p "/X"` | exit 0, the log shows `command.run settled` for the mod and no `no command.run hook answered it` | `evidence/command.out`, `evidence/command.log` |
-| interactive | only with `--interactive <script>`: a private tmux server, 200 by 50, `claude --plugin-dir` | every `expect` matched and the loaded line is in the log | `stream.raw`, `screen-NN.txt`, `screen-NN.ansi`, `interactive.log` |
+| interactive | only with `--interactive <script>`: a private tmux server, 200 by 50, `claude --plugin-dir`. With no script it reads `unverified (the mod draws; no --interactive script was run)` for a mod with a `ui.render` hook or a `$.ui.open` call, else `not applicable (draws nothing)` | every `expect` matched and the loaded line is in the log | `stream.raw`, `screen-NN.txt`, `screen-NN.ansi`, `interactive.log` |
 | install-smoke | only with `--install`: a temp marketplace, `claude plugin marketplace add`, `claude plugin install <name>@<mkt> --scope user`, then a plain `claude -p ok` | the same load check, with no `--plugin-dir` | its load log under `evidence/` |
 | isolation | always | no log names the real `~/.claude` or `~/.claude.json`; no loaded line from another provenance than `@inline`, `@builtin` or the temp marketplace; the real config files and `~/.claude/projects/` unchanged; the source tree hashes unchanged | the isolation line in `status.txt` and `run.json` |
 
-The load pass condition is the documented loaded line alone; the `settled in`, `$.<noun>.<verb> (<name>)` and `[<name>] $.ui.log` lines are observed forms that add evidence and never decide a pass. [src: docs troubleshoot.md "Read the debug log"; load logs observed | checked 2.1.288 | recheck: the load stage passes with no loaded line, or extracts nothing from a mod that ran]
+The load pass condition is the documented loaded line alone; the `settled in`, `$.<noun>.<verb> (<name>)` and `[<name>] $.ui.log` lines are observed forms that add evidence and never decide a pass. The log carries a call line for most `$` calls, but none for `$.state` calls, direct or through the `read` and `update` helpers, and none for `$.env.get` in the worked example below: a mod whose hook only updates state shows its `settled in` line and no call line. [src: docs troubleshoot.md "Read the debug log"; load logs observed | checked 2.1.288 | recheck: the load stage passes with no loaded line, or a load log shows a `$.state` call line]
 
 Interactive script lines: `type TEXT` (sends the text, then Escape, then Enter; Escape closes a typeahead suggestion that would otherwise run instead of the text), `key NAME`, `expect TEXT` (polls 20 s, saves the screen and fails naming the text), `wait MS`, `screen`. The session is ready at the prompt marker plus 5 s for the loaded line, because the banner can draw before the mod loads. First-run prompts are answered from a table of observed texts at the top of `prove.mjs`; every capture masks `sk-ant-` tokens; the server is killed on every exit path. [src: third-party observations built into prove.mjs, not yet reproduced here | checked 2.1.287 | recheck: the interactive stage times out on a first-run prompt not in the table]
 
@@ -37,9 +37,9 @@ The block uses four stage words and nothing else:
 - `ran and passed`
 - `ran and FAILED (<first error line>)`
 - `not applicable (<reason>)`
-- `unverified (<reason>)`, for a stage that should run and could not: `unverified (harness home not logged in: ...)`, `unverified (needs a live probe: steps in proof.md)`. A missing tmux is a precondition, not a stage word: `prove.mjs --interactive` refuses to start with exit 2, so a drawing mod on a machine with no tmux reports `ui evidence: unverified (interactive not requested)`.
+- `unverified (<reason>)`, for a stage that should run and could not: `unverified (harness home not logged in: ...)`, `unverified (the mod draws; no --interactive script was run)`. A missing tmux is a precondition, not a stage word: `prove.mjs --interactive` refuses to start with exit 2, so a drawing mod on a machine with no tmux runs without a script and reads `interactive: unverified (the mod draws; no --interactive script was run)`.
 
-`ui evidence:` reads `status line only`, `drawn and driven (screen-NN.txt)`, `not applicable`, or `unverified (<reason>)`. The words tested, works, loads, draws and verified appear in a reply only beside a stage that reads `ran and passed`. The skill never writes or edits a status word: a stage the script did not run cannot appear as passed. [src: scripts/prove.mjs status block | checked 2.1.288 | recheck: a handoff carries a status word not in this list]
+The interactive stage reads `not applicable (draws nothing)` for a mod with no draw call, `not applicable (no ui.render hook or $.ui.open call)` for one that draws only a toast, status line or notice, and `unverified (validate gave no footprint; no --interactive script was run)` when validate failed before it. A passing test stage adds its counts: `ran and passed (N pass, M fail)`. The `ui evidence:` line has its own four values: `not applicable` (bare, the mod draws nothing), `status line only`, `drawn and driven (screen-NN.txt)`, and `unverified (<reason>)`, for example `unverified (the mod draws; no --interactive script was run)`. The words tested, works, loads, draws and verified appear in a reply only beside a stage that reads `ran and passed`. The skill never writes or edits a status word: a stage the script did not run cannot appear as passed. [src: scripts/prove.mjs status block | checked 2.1.288 | recheck: a handoff carries a status word not in this list]
 
 Shape of the block (placeholders, not a run):
 ```text
@@ -61,9 +61,13 @@ ui evidence:   <value>
 |---|---|
 | Hooks only (guards, rewrites, logging) | validate, load, typecheck, test, isolation |
 | Adds a command | the above plus command (no login needed unless the hook reaches the model) |
-| Draws a pane, band or site | the above plus interactive, with a script that opens and drives what it draws; a `-p` run never counts |
+| Draws a pane, band or site | the above plus interactive, with a script that opens and drives what it draws; a `-p` run never counts. A band drawn from turn data shows nothing until a turn completes, so its script types a prompt and costs one model turn |
 | Injects text the model reads (`prompt.context`, `prompt.section`, `prompt.submit` context, tool-result context, `session.append`) | the above plus the live probe below, with the person's quoted lines pasted |
 | Meant to be installed, not run from a folder | the above plus install-smoke |
+
+What the command stage proves for a command that opens a pane: the `command.run` hook ran and settled. In `-p` an open is classed unasked and logged as placed, and nothing is drawn, so the pane itself needs the interactive stage.
+
+A reload (a save during development, `/reload-plugins`) is not proven by any stage, and the kit has no reload call. Design for it with `$.state`, and write `reload survival: designed for, unverified` in the handoff. [src: scripts/prove.mjs stages; observed (`ui.open ... (unasked, unmeasured columns): placed` in a `-p` command log) | checked 2.1.288 | recheck: prove.mjs gains a reload stage]
 
 When a required stage reads `not applicable` or `unverified`, the mod is not done: the handoff names the stage and its reason, and the person decides whether to run it.
 
@@ -121,16 +125,16 @@ A failure signature is `<stage>:<first error line>`, kept per mod path and sourc
 Run on this machine with `node scripts/prove.mjs assets/probe-mod --plan '$.command.register,$.env.get,$.state.get,$.state.set,$.ui.log' --env MOD_BUILDER_PROBE --state probe-mod.runs`, exit 0. The block below is the script's output, pasted unchanged; the run directory path is shortened to `~`. [src: observed | checked 2.1.288 | recheck: the same command prints a different stage word]
 
 ```
-proof: probe-mod on Claude Code 2.1.288 (types line 1; PATH binary), run ~/.cache/mod-builder/runs/20261003-164753-probe-mod
+proof: probe-mod on Claude Code 2.1.288 (types line 1; PATH binary), run ~/.cache/mod-builder/runs/20261003-175943-probe-mod
 validate:      ran and passed             evidence/validate.json; plan and footprint match
 load:          ran and passed             evidence/load.log: hooks module probe-mod@inline loaded; events: session.start, command.run
 typecheck:     ran and passed             evidence/tsc.txt (tsc 5.9.3)
 test:          ran and passed (1 pass, 0 fail)   evidence/test.txt
 command:       ran and passed             evidence/command.out: "probe-mod: probe-mod: 1 start(s) seen"; command.log: probe-mod@inline command.run settled
-interactive:   not applicable (not requested)
+interactive:   not applicable (draws nothing)
 install-smoke: not applicable (not requested)
 isolation:     ran and passed             source unchanged, no real config touched
 ui evidence:   not applicable
 ```
 
-Below the block the script printed the load lines it extracted from `evidence/load.log`: the documented `loaded` line with the events list, the `type root of` line naming the six files the load wrote, the `session.start settled in 9.8ms` line, one `$.command.register (probe-mod): /probe-mod listed` call line, and the mod's own `[probe-mod] $.ui.log (to debug): probe-mod: start 1` line. The command stage ran `claude -p "/probe-mod"` with no login and got the command's text back, which is why it reads `ran and passed` rather than `unverified`.
+Below the block the script printed the load lines it extracted from `evidence/load.log`: the documented `loaded` line with the events list, the `type root of` line naming the six files the load wrote, the `session.start settled in 10.9ms` line, one `$.command.register (probe-mod): /probe-mod listed` call line, and the mod's own `[probe-mod] $.ui.log (to debug): probe-mod: start 1` line. No line names its `$.state.get`, `$.state.set` or `$.env.get` calls. The command stage ran `claude -p "/probe-mod"` with no login and got the command's text back, which is why it reads `ran and passed` rather than `unverified`.

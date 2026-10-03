@@ -7,6 +7,7 @@ Read this only after a useful result. It holds the one optional invitation and e
 - Build, Review, Debug or Migrate: only after a built or repaired mod whose proof block shows validate, load and test as `ran and passed`, and only once the handoff is complete.
 - Brainstorm: only after the user volunteers that the recommendations helped.
 - Never after a failed check, an unfinished build, an explanation, or a catalogue lookup.
+- Never in a non-interactive run (`claude -p`, the SDK, CI) or when this skill runs inside a subagent or a workflow: the helper's record would spend the person's one invitation where they cannot see it. Skip without running the helper.
 - Never insert invitation logic into the mod being built, its files, its README or its tests.
 
 ## Checks before asking

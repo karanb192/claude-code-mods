@@ -1,15 +1,9 @@
 # Events: when each fires and what a hook may do
 
-Read this when the plan's Observe line is being written or a hook's behaviour is in doubt. It names every engine event, grouped as the docs reference groups them, with one decision line each: when it fires, and whether a hook observes, rewrites a field, or answers. Shapes (input fields, result fields, union members) are never restated here; read them from the types the engine wrote for the running build. Stamp legend: `[src: <pointer> | checked <build> | recheck: <trigger>]`; a d.ts pointer names the key or type whose doc comment holds the fact.
+Read this at step 1, when the plan's Observe line is being written, or when a hook's behaviour is in doubt. It names every engine event, grouped as the docs reference groups them, with one decision line each: when it fires, and whether a hook observes, rewrites a field, or answers. Shapes (input fields, result fields, union members) are never restated here; read them from the types the engine wrote for the running build. Stamp legend: `[src: <pointer> | checked <build> | recheck: <trigger>]`; a d.ts pointer names the key or type whose doc comment holds the fact.
 
 ## Read a shape from the types
-```sh
-T=<mod>/.claude-plugin/types/claude-code/index.d.ts    # or the types path the gate printed
-grep -n "'tool.call': " "$T"                # input type (EngineEventOf) and result type (EngineResultOf)
-grep -n "export type ToolCallInput " "$T"   # then read the doc comment above that line
-grep -n "'fs.read': " "$T"                  # a $ call as an event: OpEventOf (args) and OpValueOf (value)
-grep -oE "hook_event_name: '[A-Za-z]+'" "$T" | sort -u   # the classic.<Event> names of this build
-```
+The grep recipe lives in build.md section 2 only: `grep -n "'tool.call': " <types>/claude-code/index.d.ts` gives the input type and the result type, and the same line works for a `$` call as an event (`'fs.read': `) and for any named type. `<types>` is the folder the gate's `types:` line prints.
 
 ## Tools
 ```api-events

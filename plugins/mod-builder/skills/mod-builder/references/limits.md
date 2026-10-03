@@ -36,26 +36,26 @@ lingerMs
 | One `claude plugin test` test | 5 s unless `timeoutMs` | [src: d.ts test, docs reference.md \| checked 2.1.288 \| recheck: a 6 s test passes without timeoutMs] |
 
 ## Validator rules and their exact refusals
-`claude plugin validate <dir>` (or the manifest path) reads the module statically; `--strict` fails on warnings, `--json` puts each error in `contents[].errors[]` as `{ path, message, code }`. Source-analysis errors start ``<file>, compiled line N `<source>`: `` and most end with the tail `; $ is always spelled $.noun.event(...) at the call site, on is always on("<event>", hook), and next.to always next.to(e, "<tier>")`. Long messages are cut by the validator itself with `… [+N chars]`; there is no flag for the full text. [src: tooling probe on 2.1.288 | checked 2.1.288 | recheck: a validate run prints a prefix not listed here]
+`claude plugin validate <dir>` (or the manifest path) reads the module statically; `--strict` fails on warnings. `--json` has the top-level keys `success`, `strict`, `target`, `manifest` and `contents`: module errors go in `contents[].errors[]` as `{ path, message, code }`, manifest errors (a reserved name, the types contract) in `manifest.errors[]`, manifest warnings (author) in `manifest.warnings[]`. Source-analysis errors start ``<plugin>: <file>, compiled line N `<source>`: `` and most end with the tail `; $ is always spelled $.noun.event(...) at the call site, on is always on("<event>", hook), and next.to always next.to(e, "<tier>")`. The validator cuts a message at about 400 characters with `… [+N chars]`, counting the absolute file path, so whether a message is cut depends on where the mod lives, not on the rule; there is no flag for the full text. Match on the prefix. [src: tooling probe on 2.1.288 | checked 2.1.288 | recheck: a validate run prints a prefix not listed here]
 
-| Rule | Visible prefix after the location | Truncated |
-|---|---|---|
-| Spell every call in full, noun then method; no computed or optional access | `a computed or optional member access on $` | no |
-| Never bind, pass or read a noun as a value | `$.ui is used as a value (a noun of $ bound, passed or read)` | no |
-| Never bind `$` itself | `$ itself is bound to a name (bound, passed, spread, returned or read)` | no |
-| Event names are string literals | `the event name passed to on() is not a string literal` | yes, tail truncated |
-| Only declared event names | `"tool.calls" is not an event` | no |
-| No dynamic `import()` | `a dynamic import(); a hooks module imports its own files with an import declaration, as in import { name } from "./file.js"` | yes, tail truncated |
-| One unmatched registration per event | `on("session.start") is registered twice without a matcher; the first is at` | yes, tail truncated |
-| Env names are literals | `$.env.get takes a literal name as its first argument, so the variables a module reads and writes can be listed (got the variable k)` | no |
-| Every `$.state` key is declared | `<plugin>.<key> is not declared: the manifest's types contract must name it in interface PluginState { ... }` | no |
-| A contract holds only `declare module` and types | ``path "types": line N: `export` at the top level is followed by `type` or `interface`: a contract exports types and nothing else`` | no |
-| Names that look like Anthropic's | `Plugin name "<name>" is reserved` (the rest lists `claude-`, `anthropic-`, `anthropics-`, `cc-plugin-`) | no |
-| `author` in the manifest (warning; fails only with `--strict`) | `author: No author information provided` | no |
+| Rule | Visible prefix after the location |
+|---|---|
+| No computed or optional access on `$` itself (`$[k]`, `$?.ui`) | `a computed or optional member access on $` |
+| Never bind, pass or read a noun as a value; this also covers optional or computed access on a noun (`$.ui?.log`, `$.ui["log"]`, `$.ui[k]`) | `$.ui is used as a value (a noun of $ bound, passed or read)` |
+| Never bind `$` itself | `$ itself is bound to a name (bound, passed, spread, returned or read)` |
+| Event names are string literals | `the event name passed to on() is not a string literal` |
+| Only declared event names | `"tool.calls" is not an event` |
+| No dynamic `import()` | `a dynamic import(); a hooks module imports its own files with an import declaration, as in import { name } from "./file.js"` |
+| One unmatched registration per event | `on("session.start") is registered twice without a matcher; the first is at` |
+| Env names are literals | `$.env.get takes a literal name as its first argument, so the variables a module reads and writes can be listed (got the variable k)` |
+| Every `$.state` key is declared | `<plugin>.<key> is not declared: the manifest's types contract must name it in interface PluginState { ... }` |
+| A contract holds only `declare module` and types | ``path "types": line N: `export` at the top level is followed by `type` or `interface`: a contract exports types and nothing else`` |
+| Names that look like Anthropic's | `Plugin name "<name>" is reserved` (the rest lists `claude-`, `anthropic-`, `anthropics-`, `cc-plugin-`) |
+| `author` in the manifest (warning; fails only with `--strict`) | `author: No author information provided` |
 
-Docs-only rules with no captured text: no second `on` inside `register` (`"on" is declared again (shadowed)`); `$` passes only to a top-level function in the same file (printed `(via name)`); imports stay inside the plugin and the one bare import is `claude-code`; a telemetry hook in an installed mod needs `{ to: 'collector' }`; a `Client` module path is a literal. [src: docs create.md "Check what Claude Code reads", d.ts ClientProps | checked 2.1.287 | recheck: a validate run refuses one of these with new text]
+Docs-only rules with no captured text: no second `on` inside `register` (`"on" is declared again (shadowed)`); `$` passes only to a top-level function in the same file (printed `(via name)`); imports stay inside the plugin and the one bare import is `claude-code`; a telemetry hook in an installed mod needs `{ to: 'collector' }`; a `Client` module path is a literal. [src: docs create.md "Check what Claude Code reads"; docs reference > Telemetry and docs events > Filter which events a hook handles (the telemetry matcher); d.ts ClientProps | checked 2.1.287 | recheck: a validate run refuses one of these with new text]
 
-Note lines a passing run prints, per module: `hooks:` (matchers in braces), `calls:` (or `calls: nothing on $`), `env reads:`, `env writes:`, `state reads:`, `state writes:`, `surface modules:`, and for the manifest `types <path> declares on $:` and `types <path> declares state:`. A failed validate still prints them; a hooks.json without `modules` prints no `hooks:` line at all. [src: tooling probe on 2.1.288 | checked 2.1.288 | recheck: footprint parses a note prefix not in this list]
+Note lines a passing run prints, per module: `hooks:` (matchers in braces), `calls:` (or `calls: nothing on $`), `env reads:`, `env writes:`, `state reads:`, `state writes:`, `surface modules:`, and for the manifest `types <path> declares on $:` and `types <path> declares state:`. A validate that fails on a manifest or state-contract check still prints them; a source-analysis refusal prints none of them, only the error and `✘ Validation failed`. A hooks.json with a settings `hooks` key and no `modules` passes and prints no `hooks:` line; one with neither key fails. [src: tooling probe on 2.1.288 | checked 2.1.288 | recheck: footprint parses a note prefix not in this list]
 
 ## Debug-log line forms
 Written with `claude --debug` or `--debug-file <path>`; grep for the mod's name.

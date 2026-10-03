@@ -1,6 +1,6 @@
 # Build a mod: shape check and files (Build steps 2 and 3)
 
-Read at step 2, after the person said yes to the plan. Step 2 turns every name in the plan into a line in the types; step 3 writes the files. Every code template below was validated with `--strict`, loaded headlessly, typechecked and tested on the build in its stamp. Stamp legend: sources.md.
+Read at steps 2 and 3, after the person said yes to the plan. Step 2 turns every name in the plan into a line in the types; step 3 writes the files. The test file is written at step 5, from testing.md. Every code template below was validated with `--strict`, loaded headlessly, typechecked and tested on the build in its stamp. Stamp legend: sources.md.
 
 ## 1. Where the files go
 
@@ -12,7 +12,7 @@ Write into the directory the person named, or `./<name>/` in the current workspa
 
 ## 2. Shape check (step 2)
 
-The skill never restates a shape: input fields, result arms, options, props. Read each from the types the gate printed (`<types>` below is that folder: a mod's `.claude-plugin/types/` after a load, or the harness cache). Every `$` method is also an event of the same name, so one recipe covers both.
+The skill never restates a shape: input fields, result arms, options, props. Read each from the types the gate printed (`<types>` below is the folder the gate's `types:` line names, such as `~/.cache/mod-builder/types/2.1.288`, or a mod's `.claude-plugin/types/` after a load). Every `$` method is also an event of the same name, so one recipe covers both. This is the only copy of the recipe; other references point here.
 
 ```sh
 D=<types>/claude-code/index.d.ts
@@ -23,6 +23,7 @@ grep -nE "export (type|interface) PaneOpenArgs\b" "$D"   # any named type
 grep -n "export type RenderPropsOf" "$D"   # render-site props; find the component's key below it
 grep -n "export type Elements = " "$D"     # element tables, one per surface
 grep -n "declare module 'claude-code/testing'" "$D"   # the test kit
+grep -oE "hook_event_name: '[A-Za-z]+'" "$D" | sort -u   # the classic.<Event> names of this build
 grep -n "^ *Bash: " <types>/claude-code-tools/index.d.ts   # a built-in tool: 1st hit its input, 2nd its result
 ```
 
@@ -38,19 +39,19 @@ Write the shapes list into the handoff, one row per plan item: the name, `file:l
 | `hooks/hooks.json` | always | `modules` holds exactly one path, relative to this file |
 | `hooks/register.ts` | always | `.tsx` only when it writes JSX; `.js`, `.mjs`, `.cjs`, `.jsx`, `.mts`, `.cts` also load |
 | `types/index.d.ts` | `$.state` or a new noun | the contract; composing.md for nouns |
-| `tests/register.test.ts` | always | any name ending `.test.ts` or `.test.tsx` runs |
+| `tests/register.test.ts` | always, written at step 5 | any name ending `.test.ts` or `.test.tsx` runs; testing.md |
 | `README.md`, `DECISIONS.md` | always | templates below |
-| `.gitignore` | always | `.claude-plugin/types/` |
+| `.gitignore` | always | two lines: `.claude-plugin/types/` and `node_modules/` |
 
-[src: docs reference > Files; d.ts header (module suffixes, ES modules only) | checked 2.1.288 | recheck: gate prints drift touching Register]
+[src: docs reference > Files; d.ts header (module suffixes, ES modules only) | checked 2.1.288 | recheck: a grep for Register in the types finds nothing]
 
-No `tsconfig.json` from the skill. The first load writes `{ "extends": "./.claude-plugin/types/tsconfig.json" }` at the mod's root when none exists and never touches an existing one; commit that one line so an editor finds the types after a load. An older tsconfig that includes `.claude/types` makes `tsc` fail with `Cannot find module 'claude-code'`: replace it with the extends line. The types folder carries its own `.gitignore` of `*`; the mod's entry is belt and braces. [src: observed (load writes, tsc) | checked 2.1.288 | recheck: a load's `type root of` line lists different files]
+No `tsconfig.json` from the skill. The first load writes `{ "extends": "./.claude-plugin/types/tsconfig.json" }` at the mod's root when none exists and never touches an existing one; commit that one line so an editor finds the types after a load. prove.mjs loads a copy in its run folder, so the source tree gets its tsconfig and types only after the person runs one `claude --plugin-dir <dir>` load; until then `tsc -p <dir>` on the source has nothing to extend. Say so in the handoff. An older tsconfig that includes `.claude/types` makes `tsc` fail with `Cannot find module 'claude-code'`: replace it with the extends line. The types folder carries its own `.gitignore` of `*`; the mod's entry is belt and braces. [src: observed (load writes, tsc) | checked 2.1.288 | recheck: a load's `type root of` line lists different files]
 
 `claude plugin init` scaffolds a different kind of plugin (command hooks), not a mod: write the files directly. [src: observed (init probe) | checked 2.1.288 | recheck: init writes a `modules` key]
 
 ## 4. Code the validator can read
 
-The validator reads the module's source the way the engine does; a module it cannot read does not load. Each row gives the rule and the visible prefix of the refusal. Long refusals are cut by the validator itself with `… [+N chars]`: the tail is truncated, so match on the prefix. Every source-analysis refusal also ends with the reminder that `$` is always spelled in full at the call site.
+The validator reads the module's source the way the engine does; a module it cannot read does not load. Each row gives the rule and the visible prefix of the refusal. The validator cuts a message at about 400 characters with `… [+N chars]`, the absolute file path included, so any refusal may lose its tail depending on where the mod lives: match on the prefix. Every source-analysis refusal also ends with the reminder that `$` is always spelled in full at the call site.
 
 <!-- api-check: ignore tool.calls, $.noun.method, $.noun -->
 
@@ -61,9 +62,9 @@ The validator reads the module's source the way the engine does; a module it can
 | Pass `$` only to a function declared at the top level of the same file (the calls line then reads `(via name)`); never to a method, an inner function or an imported one | (refused at validate; the helpers `read` and `update` from `claude-code` are the exceptions) |
 | Event names in `on` are string literals | `the event name passed to on() is not a string literal` |
 | The event exists | `"tool.calls" is not an event` |
-| One unmatched hook per event; add a matcher for a second | `on("session.start") is registered twice without a matcher; the first is at` (tail truncated) |
+| One unmatched hook per event; add a matcher for a second | `on("session.start") is registered twice without a matcher; the first is at` |
 | No second `on` declared inside `register` | `"on" is declared again (shadowed)` |
-| `import` declarations only, relative, inside the plugin; the one bare import is `claude-code`; ES modules, no `require` | `a dynamic import(); a hooks module imports its own files with an import declaration` (tail truncated) |
+| `import` declarations only, relative, inside the plugin; the one bare import is `claude-code`; ES modules, no `require` | `a dynamic import(); a hooks module imports its own files with an import declaration` |
 | `$.env.get` and `$.env.set` take a literal name | `$.env.get takes a literal name as its first argument` |
 | `$.state` references use a literal plugin and key, declared in the contract | `<plugin>.<key> is not declared: the manifest's types contract must name it in interface PluginState` |
 | The contract holds `declare module` and type or interface declarations only; no `export {}` | ``path "types": line N: `export` at the top level is followed by`` |
@@ -77,7 +78,7 @@ Rules the validator does not catch:
 - Type `register`: `import type { Register } from 'claude-code'`. Untyped, strict `tsc` fails with TS7006 while validate and load pass. A `.js` module types it with `/** @type {import('claude-code').Register} */`. [src: observed (tsc); d.ts header | checked 2.1.288 | recheck: tsc accepts an untyped register]
 - Never name anything `h` or `Fragment`: both are the environment's globals in the hooks module and in surface modules. Write no `@jsx` pragma. A starter's `/** @jsx h */` and `/** @jsxFrag Fragment */` are harmless and may be deleted; a pragma naming any other factory is a defect even though nothing refuses it, because it retargets the JSX and hides `<Client>` tags from the footprint. [src: observed (pragma probe) and the global h doc comment in claude-code/index.d.ts | checked 2.1.288 | recheck: a .tsx probe with /** @jsx h */ fails validate or load, or the h doc comment changes]
 - `$.ui.resolve(e)` returns the element table synchronously: never `await` it. [src: d.ts ui noun resolve | checked 2.1.288 | recheck: gate prints drift touching $.ui.resolve]
-- `e` is frozen: pass a copy to `next`. Call `next(e)` once per time core should act; a second `next(e)` on `tool.call` is a retry; a hook that returns while its `next` is pending aborts what runs beneath. [src: d.ts EngineEventOf tool.call, Next; docs events > Handle a hook that fails | checked 2.1.288 | recheck: gate prints drift touching Next]
+- `e` is frozen: pass a copy to `next`. Call `next(e)` once per time core should act; a second `next(e)` on `tool.call` is a retry; a hook that returns while its `next` is pending aborts what runs beneath. [src: d.ts EngineEventOf tool.call, Next; docs events > Handle a hook that fails | checked 2.1.288 | recheck: a grep for Next in the types finds nothing]
 - Give `.catch` to any hook whose failure must not pass silently, and know its grace is 1 s. A guard fails closed by answering a deny there. [src: d.ts HookBudget catchMs | checked 2.1.288 | recheck: api-check prints SHAPE DRIFT budget.catchMs]
 - Register commands last in `session.start`, or inside `try`: a refused name throws and skips the rest of the hook. [src: docs test > Follow the test kit's rules (a rejected call skips the rest of the hook) | checked 2.1.288 | recheck: a test shows the hook continuing after a refused register]
 - Comment only a non-obvious constraint or a reason; never narrate what a line does. Decided; no source.
@@ -103,7 +104,7 @@ Replace `MOD_NAME`, `AUTHOR` and the text in capitals. Each is the shape the sta
 }
 ```
 
-`hooks/hooks.json`. Settings hooks may sit beside `modules` under `hooks`. A file with no `modules` key makes validate pass with no `hooks:` line.
+`hooks/hooks.json`. Settings hooks may sit beside `modules` under `hooks`. A file with a settings `hooks` key and no `modules` key passes validate with no `hooks:` line; a file with neither key, a misspelled `module` included, fails validate. [src: observed (validate) | checked 2.1.288 | recheck: validate passes a hooks.json with neither key]
 
 ```json
 {

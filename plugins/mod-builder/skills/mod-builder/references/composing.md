@@ -6,7 +6,7 @@ Read when a mod adds a noun to `$`, calls another mod's noun, shares `$.state` w
 
 ## Add a noun to `$`
 
-`engine.create` is the fold that builds `$`, once per load or reload, core innermost. A hook is written in post-order: `const built = await next(e)` is `$` as built so far, and the hook returns it with its own noun added. A step may add nouns and withhold nouns; it may never replace a noun another step added (the step fails, naming both plugins, and its plugin unloads). Inside that hook `$` is the empty table, so any `$` call there is a compile error. The hook has no budget and takes no `.catch`; its failure is the load's. [src: d.ts EngineEventOf engine.create, EngineCreateInput, NoEngineInterface, Registration | checked 2.1.288 | recheck: gate prints drift touching EngineCreateInput]
+`engine.create` is the fold that builds `$`, once per load or reload, core innermost. A hook is written in post-order: `const built = await next(e)` is `$` as built so far, and the hook returns it with its own noun added. A step may add nouns and withhold nouns; it may never replace a noun another step added (the step fails, naming both plugins, and its plugin unloads). Inside that hook `$` is the empty table, so any `$` call there is a compile error. The hook has no budget and takes no `.catch`; its failure is the load's. [src: d.ts EngineEventOf engine.create, EngineCreateInput, NoEngineInterface, Registration | checked 2.1.288 | recheck: a grep for EngineCreateInput in the types finds nothing]
 
 ```ts
 import type { Register } from 'claude-code'
@@ -51,13 +51,13 @@ A call on another mod's noun appears in the dependent's `calls:` line; the reach
 ## Share `$.state` between mods
 
 - Any plugin reads any value; only its owner writes it. Another plugin changes a value by hooking `state.set` with a matcher on the plugin and the key, then passing `next` another value: it can contribute, veto or observe. The reference is pinned; only the value is rewritten. [src: d.ts state noun ("its owner alone writes it"), OpEventOf state.set | checked 2.1.288 | recheck: api-check prints SHAPE DRIFT state.ownerOnly]
-- Read back what landed: a hook above may have rewritten the value, and a write with `ifVersion` can miss, so `$.state.set` answers only whether it landed and the version; a `$.state.get` reads what stands. [src: d.ts StateSetResult | checked 2.1.288 | recheck: gate prints drift touching StateSetResult]
+- Read back what landed: a hook above may have rewritten the value, and a write with `ifVersion` can miss, so `$.state.set` answers only whether it landed and the version; a `$.state.get` reads what stands. [src: d.ts StateSetResult | checked 2.1.288 | recheck: a grep for StateSetResult in the types finds nothing]
 - To read another plugin's value with types, its `PluginState` declaration must reach your types: list it under `dependencies`.
 - Keys print as `<plugin>.<key>` in `state reads:` and `state writes:`, and the plan's `State:` line lists them.
 
 ## The organisation's three control points
 
-- Which mods load: a `plugin.register` hook. It reads where the mod would run and what its module uses, the calls spelled `noun.method` (`process.run`), without the `$.` the validator prints, and may refuse it. A check that throws fails open: add a `.catch` that refuses user-tier mods so it fails closed. [src: docs admin > Enforce a policy with a mod of your own; docs admin > Refuse mods when your check fails; d.ts PluginRegisterUses | checked 2.1.288 | recheck: gate prints drift touching PluginRegisterUses]
+- Which mods load: a `plugin.register` hook. It reads where the mod would run and what its module uses, the calls spelled `noun.method` (`process.run`), without the `$.` the validator prints, and may refuse it. A check that throws fails open: add a `.catch` that refuses user-tier mods so it fails closed. [src: docs admin > Enforce a policy with a mod of your own; docs admin > Refuse mods when your check fails; d.ts PluginRegisterUses | checked 2.1.288 | recheck: a grep for PluginRegisterUses in the types finds nothing]
 
 ```ts
 import type { Register } from 'claude-code'
@@ -74,14 +74,17 @@ export const register: Register = on => {
 ```
 
 - Which nouns exist: an `engine.create` hook. Managed plugins come first in the fold, so an organisation's withholding wins.
-- What every mod does: a hook on any call by name (a hook on `fs.write` sees every `$.fs.write` another mod makes) or on `*`, at the top of every chain. `*` does not select `telemetry.*`. [src: docs admin > Enforce a policy with a mod of your own; docs reference > Telemetry | checked 2.1.288 | recheck: gate prints drift touching the glob rules]
+- What every mod does: a hook on any call by name (a hook on `fs.write` sees every `$.fs.write` another mod makes) or on `*`, at the top of every chain. `*` does not select `telemetry.*`. [src: docs admin > Enforce a policy with a mod of your own; docs reference > Telemetry | checked 2.1.288 | recheck: a `*` hook receives a telemetry event]
 
 ```ts
 on('*', ($, e, next) => {
+  if (next.is('engine.create', e)) return next(e)
   $.ui.log(`${next.origin.plugin} raised ${next.event}`, { to: 'debug' })
   return next(e)
 })
 ```
+
+A `*` hook also runs at `engine.create`, where `$` is the empty table; unguarded, the `$.ui.log` above throws at every load. Test `next.is('engine.create', e)` before touching `$`. [src: d.ts AnyEventHook; observed (an unguarded `*` hook logs `failed at engine.create` on load) | checked 2.1.288 | recheck: a grep for AnyEventHook in the types finds nothing]
 
 Placement is the mechanism. Managed `prependPlugins` and `appendPlugins` (read from managed settings, never a repository's) put the organisation's mods before or after every mod a person installs; only a mod in one of them can call `next.to`. Setting `prependPlugins` replaces the default, so it must name `sec-default@builtin` to keep the built-in guard. [src: docs reference > Settings and environment variables; docs admin > Install your organization's mods and set the order | checked 2.1.288 | recheck: either section changes]
 
@@ -89,6 +92,6 @@ A mod written for other people expects all three: a plugin above may withhold a 
 
 ## Options from the manifest
 
-`register(on, options)` receives the values of the fields the manifest's `userConfig` declares, defaults filled in, validated against each field's type before the module loads; read install-time settings here, never through `$.env.get`. The values live in settings under `pluginConfigs`, keyed by the plugin id (`<name>@<marketplace>`), or `<name>@inline` for `--plugin-dir`; sensitive ones go to secure storage. Each non-secret field is a `/config` row, and a change reloads the module with the new options. A string field that lists `options` is a picker, and a stored value outside the list counts as unset. A required field with no value fails the load with `options do not fit plugin.json userConfig`. Tests pass values with `test(name, { options }, body)`. The value types: `PluginOptions`. [src: d.ts PluginOptions, Register; docs reference > Settings and environment variables; docs troubleshoot > `options do not fit plugin.json userConfig` | checked 2.1.288 | recheck: gate prints drift touching PluginOptions]
+`register(on, options)` receives the values of the fields the manifest's `userConfig` declares, defaults filled in, validated against each field's type before the module loads; read install-time settings here, never through `$.env.get`. The values live in settings under `pluginConfigs`, keyed by the plugin id (`<name>@<marketplace>`), or `<name>@inline` for `--plugin-dir`; sensitive ones go to secure storage. Each non-secret field is a `/config` row, and a change reloads the module with the new options. A string field that lists `options` is a picker, and a stored value outside the list counts as unset. A required field with no value fails the load with `options do not fit plugin.json userConfig`. Tests pass values with `test(name, { options }, body)`. The value types: `PluginOptions`. [src: d.ts PluginOptions, Register; docs reference > Settings and environment variables; docs troubleshoot > `options do not fit plugin.json userConfig` | checked 2.1.288 | recheck: a grep for PluginOptions in the types finds nothing]
 
 A field needs `type`, `title` and `description` (without `title` the validator refuses it); build.md has a manifest that passes. The plugins manifest reference is the contract for the rest of the field. [src: observed (validate) | checked 2.1.288 | recheck: a validate run accepts a field with no title]

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Step 0: checks this machine can build and prove a mod, finds this build's types,
 // and diffs them against the skill's baseline and references. Prints the block the
-// skill pastes verbatim when any line is not ok.
+// skill pastes verbatim when any line is not ok. A line that needs attention starts
+// with "! "; a line that is fine has no marker. --json lists those line keys in "attention".
 //
 // usage: node gate.mjs [mod-dir] [--types <path>] [--json]
 //
@@ -35,7 +36,7 @@ function modsLoad(claude) {
   try {
     const r = runClaude(claude.bin, ['plugin', 'test', tmp], { cwd: tmp, timeoutMs: 60_000 })
     const text = `${r.stdout}\n${r.stderr}`
-    if (/no hooks module to load/.test(text)) return { line: 'yes (claude plugin test: no hooks module to load)' }
+    if (/no hooks module to load/.test(text)) return { ok: true, line: 'yes (claude plugin test ran; it found no module there, as expected)' }
     const here = text.match(/hooks modules are turned off here(?: \(([^)]*)\))?/)
     if (here) return { line: `no, turned off here (${here[1] || 'a setting or policy'})`, stop: `mods are turned off here (${here[1] || 'a setting or policy'}); remove the setting or ask the admin` }
     if (/hooks modules are turned off (?:for installed plugins )?in this process/.test(text)) {
@@ -46,7 +47,14 @@ function modsLoad(claude) {
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
 }
 
-function driftLine(res) {
+// Each line builder returns { line, ok }; ok false puts "! " in front of the line.
+// Additions alone are fine: a newer build adds names the plan may simply not use.
+export function driftLine(res) {
+  const ok = !res.drift.some(d => d.sign === '-') && !res.shapeDrift.length
+  return { line: driftText(res), ok }
+}
+
+function driftText(res) {
   const groups = new Map()
   for (const d of res.drift.filter(d => d.sign === '+')) {
     if (!groups.has(d.family)) groups.set(d.family, [])
@@ -60,7 +68,12 @@ function driftLine(res) {
   return parts.join(', ')
 }
 
-function referencesLine(res) {
+export function referencesLine(res) {
+  const ok = res.refs.found && !res.stale.length && !res.shapeDrift.length
+  return { line: referencesText(res), ok }
+}
+
+function referencesText(res) {
   if (!res.refs.found) return `none at ${slash(path.relative(SKILL_DIR, res.refs.dir)) || '.'}/ (0 stale reported; nothing to check)`
   if (res.stale.length || res.shapeDrift.length) {
     const bits = []
@@ -68,7 +81,8 @@ function referencesLine(res) {
     if (res.shapeDrift.length) bits.push(`${res.shapeDrift.length} shape drift: ${list(res.shapeDrift.map(s => s.id))}`)
     return `partly stale (${bits.join('; ')})`
   }
-  return `usable (0 stale, ${res.uncovered.length} uncovered)`
+  const names = [...new Set(res.uncovered.map(u => u.name))]
+  return `usable (0 stale, ${names.length} uncovered${names.length ? `: ${list(names, 10)}` : ''})`
 }
 
 function typescriptLine() {
@@ -76,10 +90,10 @@ function typescriptLine() {
   if (tsc) {
     const r = runClaude(tsc, ['--version'], { timeoutMs: 30_000 })
     const v = r.stdout.match(/(\d+\.\d+\.\d+)/)?.[1]
-    return `tsc ${v || 'unknown version'} (${tsc})`
+    return { ok: true, line: `tsc ${v || 'unknown version'} (${tsc})` }
   }
-  if (which('npx')) return 'npx -y -p typescript tsc (no tsc on PATH; the first typecheck downloads TypeScript)'
-  return 'none (no tsc and no npx; the typecheck stage will read unverified)'
+  if (which('npx')) return { line: 'npx -y -p typescript tsc (no tsc on PATH; the first typecheck downloads TypeScript)' }
+  return { line: 'none (no tsc and no npx; the typecheck stage will read unverified)' }
 }
 
 function loginState(claude, home) {
@@ -95,11 +109,11 @@ function clashLine(claude, name) {
   // The user's own config on purpose: the clash is with what they installed.
   const r = runClaude(claude.bin, ['plugin', 'list', '--json'], { timeoutMs: 60_000 })
   let installed
-  try { installed = JSON.parse(r.stdout) } catch { return `unknown (claude plugin list --json printed no JSON)` }
+  try { installed = JSON.parse(r.stdout) } catch { return { line: 'unknown (claude plugin list --json printed no JSON)' } }
   const hits = installed.filter(p => String(p.id || p.name || '').split('@')[0] === name)
-  if (!hits.length) return `none (no installed plugin named ${name})`
+  if (!hits.length) return { ok: true, line: `none (no installed plugin named ${name})` }
   const ids = hits.map(p => `${p.id}${p.enabled === false ? ' (disabled)' : ''}`).join(', ')
-  return `${ids} installed; --plugin-dir and the installed copy conflict: ask which one to test against`
+  return { line: `${ids} installed; --plugin-dir and the installed copy conflict: ask which one to test against` }
 }
 
 function detailsLine(claude, home, modDir, name) {
@@ -113,29 +127,30 @@ function detailsLine(claude, home, modDir, name) {
 
 export function runGate({ modDir, types } = {}) {
   const lines = []
+  const attention = []
   const stops = []
-  const add = (key, value) => lines.push([key, value])
-  const out = { lines, claude: null, types: null, apiCheck: null }
+  const add = (key, value, ok = true) => { lines.push([key, value]); if (!ok) attention.push(key) }
+  const out = { lines, attention, claude: null, types: null, apiCheck: null }
 
   const claude = findClaude()
   out.claude = claude
   const usable = claude?.bin && claude.version
   if (!claude?.bin) {
-    add('claude', `not found (no claude on PATH${claude?.ignoredExecPath ? `; CLAUDE_CODE_EXECPATH ${claude.ignoredExecPath} is not executable` : ''})`)
+    add('claude', `not found (no claude on PATH${claude?.ignoredExecPath ? `; CLAUDE_CODE_EXECPATH ${claude.ignoredExecPath} is not executable` : ''})`, false)
     stops.push('no claude binary; install Claude Code')
   } else if (!claude.version) {
-    add('claude', `${claude.bin} printed no version`)
+    add('claude', `${claude.bin} printed no version`, false)
     stops.push(`${claude.bin} --version printed no version`)
   } else {
-    add('claude', claudeLine(claude))
+    add('claude', claudeLine(claude), cmpVersion(claude.version, FLOOR) >= 0)
     if (cmpVersion(claude.version, FLOOR) < 0) stops.push(`Claude Code ${claude.version} is below the floor ${FLOOR}; update Claude Code`)
   }
 
   if (usable) {
     const m = modsLoad(claude)
-    add('mods load', m.line)
+    add('mods load', m.line, !!m.ok)
     if (m.stop) stops.push(m.stop)
-  } else add('mods load', 'not checked (no usable claude)')
+  } else add('mods load', 'not checked (no usable claude)', false)
 
   let home = null
   try { home = harnessHome() } catch (e) { stops.push(e.message) }
@@ -146,32 +161,40 @@ export function runGate({ modDir, types } = {}) {
       const loc = locateTypes({ modDir, typesPath: types, home: home || undefined, claude: usable ? claude : null })
       out.types = loc
       const older = usable && loc.version !== claude.version ? `; claude is ${claude.version}` : ''
-      add('types', `${tildify(loc.file)} (written by ${loc.version || 'an unknown build'}, ${loc.source}${older})`)
+      const written = `written by ${loc.version || 'an unknown build'}, ${loc.source}${older}`
+      add('types', loc.dir ? `${tildify(loc.dir)} (claude-code/index.d.ts inside; ${written})` : `${tildify(loc.file)} (${written})`)
       res = runApiCheck({ typesLoc: loc })
       out.apiCheck = res
     } catch (e) {
-      add('types', `not found (${e.message})`)
+      add('types', `not found (${e.message})`, false)
       stops.push(`no types for this build: ${e.message}`)
     }
-  } else add('types', 'not checked (no usable claude and no --types)')
+  } else add('types', 'not checked (no usable claude and no --types)', false)
 
   const baseline = (() => { try { return JSON.parse(fs.readFileSync(DEFAULTS.baseline, 'utf8')).version } catch { return null } })()
-  add('baseline', baseline ? `${slash(path.relative(SKILL_DIR, DEFAULTS.baseline))} stamped ${baseline}` : `missing (${slash(path.relative(SKILL_DIR, DEFAULTS.baseline))})`)
+  add('baseline', baseline ? `${slash(path.relative(SKILL_DIR, DEFAULTS.baseline))} stamped ${baseline}` : `missing (${slash(path.relative(SKILL_DIR, DEFAULTS.baseline))})`, !!baseline)
   if (!baseline) stops.push('the baseline map is missing; reinstall the skill')
-  add('drift', res ? driftLine(res) : 'not checked')
-  add('references', res ? referencesLine(res) : 'not checked')
-  add('typescript', typescriptLine())
-  add('tmux', process.platform === 'win32' ? 'not on Windows (the interactive stage reads unverified)' : which('tmux') ? 'present' : 'missing (the interactive stage reads unverified (tmux missing))')
+  // With no types the types line already carries the marker.
+  const drift = res ? driftLine(res) : { line: 'not checked', ok: true }
+  add('drift', drift.line, drift.ok)
+  const refs = res ? referencesLine(res) : { line: 'not checked', ok: true }
+  add('references', refs.line, refs.ok)
+  const ts = typescriptLine()
+  add('typescript', ts.line, !!ts.ok)
+  if (process.platform === 'win32') add('tmux', 'not on Windows (the interactive stage reads unverified)', false)
+  else if (which('tmux')) add('tmux', 'present')
+  else add('tmux', 'absent (do not pass --interactive to prove; it refuses with exit 2)', false)
 
   if (home) {
     const login = usable ? loginState(claude, home) : null
-    const how = `run CLAUDE_CONFIG_DIR=${tildify(home.config)} claude auth login for command and interactive stages`
-    add('harness', `${tildify(home.dir)} (login: ${login === null ? 'not checked' : login ? 'yes' : `no; ${how}`})`)
-  } else add('harness', `refused (${stops.find(s => s.startsWith('harness home')) || 'unusable'})`)
+    const how = `run CLAUDE_CONFIG_DIR=${tildify(home.config)} claude auth login once for the interactive stage, or for a command whose hook reaches the model`
+    add('harness', `${tildify(home.dir)} (login: ${login === null ? 'not checked' : login ? 'yes' : `no; ${how}`})`, login === true)
+  } else add('harness', `refused (${stops.find(s => s.startsWith('harness home')) || 'unusable'})`, false)
 
   if (modDir && usable) {
     const name = modName(modDir)
-    add('name clash', name ? clashLine(claude, name) : 'not checked (no name in .claude-plugin/plugin.json)')
+    const clash = name ? clashLine(claude, name) : { line: 'not checked (no name in .claude-plugin/plugin.json)' }
+    add('name clash', clash.line, !!clash.ok)
     const details = name && home ? detailsLine(claude, home, modDir, name) : null
     if (details) add('details', details)
   }
@@ -180,13 +203,14 @@ export function runGate({ modDir, types } = {}) {
   if (stops.length) { out.verdict = `stop: ${stops[0]}`; out.exit = 2 }
   else if (flagged.length) { out.verdict = `proceed, references partly stale: ${list([...new Set(flagged)], 10)}`; out.exit = 1 }
   else { out.verdict = 'proceed'; out.exit = 0 }
-  add('verdict', out.verdict)
+  add('verdict', out.verdict, out.exit !== 2)
   out.stops = stops
   return out
 }
 
 export function formatGate(out) {
-  return ['mod-builder gate', ...out.lines.map(([k, v]) => `  ${(k + ':').padEnd(LABEL_WIDTH)}${v}`)].join('\n')
+  const marked = new Set(out.attention || [])
+  return ['mod-builder gate', ...out.lines.map(([k, v]) => `${marked.has(k) ? '! ' : '  '}${(k + ':').padEnd(LABEL_WIDTH)}${v}`)].join('\n')
 }
 
 if (isMain(import.meta)) {

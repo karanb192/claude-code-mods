@@ -8,10 +8,11 @@ Read this in Migrate mode, or in Review when a mod predates the public release. 
 | Id | Old (early access) | New (2.1.287 or later) | Caught by |
 |---|---|---|---|
 | M.flag | `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` in a README, settings or scripts | Delete it; 2.1.287 and later ignore it at any value and mods are on by default | scan |
-| M.types | `/plugin-types` in a README or script; `.claude/types/` in tsconfig or `.gitignore` | Delete; every load from `--plugin-dir`, `CLAUDE_CODE_PLUGIN_DIRS` or dev-mods writes `.claude-plugin/types/`, which ignores itself | scan |
-| M.tsconfig | tsconfig `include` naming `.claude/types` | Delete the tsconfig (the engine writes one that extends `./.claude-plugin/types/tsconfig.json`) or make it that one line; the engine never replaces an existing tsconfig, so a stale one fails `tsc` with `Cannot find module 'claude-code'` | scan |
-| M.desc | a description or README saying "Needs function hooks" or "early access" | Drop it; the README says "Claude Code 2.1.287 or later" and the version it was tested on | scan |
-| M.register | `export function register(on)`, untyped | `import type { Register } from 'claude-code'` and `export const register: Register = (on, options) => ...`; strict `tsc` fails on the implicit any otherwise | scan |
+| M.types | `/plugin-types` in a README or script | Delete; every load from `--plugin-dir`, `CLAUDE_CODE_PLUGIN_DIRS` or dev-mods writes `.claude-plugin/types/`, which ignores itself | scan |
+| M.tsconfig | `.claude/types` anywhere: a tsconfig `include`, a `.gitignore` entry | Delete the `.gitignore` entry; delete the tsconfig (the engine writes one that extends `./.claude-plugin/types/tsconfig.json`) or make it that one line; the engine never replaces an existing tsconfig, so a stale one fails `tsc` with `Cannot find module 'claude-code'` | scan |
+| M.desc | "Needs function hooks" anywhere; "early access" or "function hooks" in a `plugin.json` description | Drop it; the README says "Claude Code 2.1.287 or later" and the version it was tested on | scan |
+| M.early | "early access" in README prose | Drop it; say "Claude Code 2.1.287 or later" | scan |
+| M.register | `export function register(on)`, untyped, in a module under `hooks/` or a README example | `import type { Register } from 'claude-code'` and `export const register: Register = (on, options) => ...`; strict `tsc` fails on the implicit any otherwise | scan |
 | M.resolve | `await $.ui.resolve(e)` | `$.ui.resolve(e)`; it is synchronous | scan |
 | M.npx | `npx tsc -p .` | `tsc -p <dir>` or `npx -y -p typescript tsc -p <dir>`; bare `npx tsc` installs an unrelated package | scan |
 | M.deps | tsconfig `include` pointing at another mod's `types/` to use its noun | List the provider under `dependencies` in plugin.json; the engine writes its contract into `.claude-plugin/types/<plugin>/index.d.ts` | review |
@@ -41,5 +42,5 @@ The baseline is the build `data/api-map.json` was extracted from. Each later bui
 
 ### 2.1.288
 - `+ $.ui.selection` (method, under `$.ui`) and `+ ui.selection` (op event): resolves what the person last selected with the mouse, as copy would take it, with the transcript row it lies in; `undefined` with nothing selected, with fullscreen off, in `-p`, and on a remote surface. [src: d.ts CoreEngineInterface ui selection | checked 2.1.288 | recheck: gate drift line stops listing ui.selection]
-- Reach: the seed rules grade it L0 through `ui.*`, but it reads transcript text the person chose; grade it by hand as reading the transcript until a rule names it. [src: data/reach-rules.json | checked 2.1.288 | recheck: a rule for ui.selection lands in data/reach-rules.json]
+- Reach: `data/reach-rules.json` grades it L1 reads the transcript, through a `ui.selection` rule ordered before `ui.*`; footprint.mjs prints that level with no hand grading. [src: data/reach-rules.json | checked 2.1.288 | recheck: footprint grades `$.ui.selection` at another level]
 - No other event, method, element, site, tier or budget value changed between 2.1.287 and 2.1.288. [src: name diff of the 2.1.287 snapshot and the types a 2.1.288 load wrote | checked 2.1.288 | recheck: gate drift line names anything else]

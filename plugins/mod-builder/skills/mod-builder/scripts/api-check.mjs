@@ -6,6 +6,16 @@
 // usage: node api-check.mjs [--types <dir>] [--baseline data/api-map.json] [--refs references/]
 //          [--skill SKILL.md] [--mod <dir>] [--write-baseline] [--json]
 //
+// --mod prints MIGRATE <id> <file>:<line> for each leftover. The ids:
+//   M.flag      CLAUDE_CODE_ENABLE_FUNCTION_HOOKS, anywhere
+//   M.types     /plugin-types, anywhere
+//   M.tsconfig  .claude/types, anywhere (tsconfig.json, .gitignore)
+//   M.resolve   await $.ui.resolve(, anywhere
+//   M.npx       npx tsc, anywhere
+//   M.register  an untyped register(on): in README files, and in .js/.mjs/.ts/.tsx under hooks/
+//   M.early     "early access", in README files
+//   M.desc      "Needs function hooks" anywhere; "early access" or "function hooks" in a plugin.json description
+//
 // Exit 0: no stale name, no shape drift, no migrate finding. 1: findings. 2: tooling error.
 // Additions and uncovered names never fail the check.
 import fs from 'node:fs'
@@ -16,6 +26,8 @@ import {
 } from './lib.mjs'
 
 const USAGE = 'usage: node api-check.mjs [--types <dir>] [--baseline data/api-map.json] [--refs references/] [--skill SKILL.md] [--mod <dir>] [--write-baseline] [--json]'
+const REGISTER_TO = "import type { Register } from 'claude-code'; export const register: Register = (on, options) => ..."
+
 export const DEFAULTS = {
   baseline: path.join(SKILL_DIR, 'data', 'api-map.json'),
   assertions: path.join(SKILL_DIR, 'data', 'api-assertions.json'),
@@ -35,10 +47,14 @@ export const MIGRATE_RULES = [
   { id: 'M.tsconfig', re: /\.claude\/types\/?/, to: '.claude-plugin/types/ (written on load); tsconfig.json is { "extends": "./.claude-plugin/types/tsconfig.json" }' },
   { id: 'M.resolve', re: /await\s+\$\.ui\.resolve\(/, to: '$.ui.resolve( (it returns, it does not resolve)' },
   { id: 'M.npx', re: /\bnpx\s+tsc\b/, to: 'tsc -p <dir>, or npx -y -p typescript tsc -p <dir>' },
-  { id: 'M.register', readme: true, re: /register(?:\s*:\s*Register)?\s*=\s*(?:async\s*)?\(?\s*on\s*\)?\s*=>|function\s+register\s*\(\s*on\s*\)/, to: 'export const register: Register = (on, options) => { ... }' },
+  { id: 'M.register', readme: true, re: /register(?:\s*:\s*Register)?\s*=\s*(?:async\s*)?\(?\s*on\s*\)?\s*=>|function\s+register\s*\(\s*on\s*\)/, to: REGISTER_TO },
+  // Hooks modules: an exported register function whose one or two parameters carry no type.
+  { id: 'M.register', hooks: true, re: /export\s+(?:async\s+)?function\s+register\s*\(\s*on\s*(?:,\s*[A-Za-z_$][\w$]*\s*)?\)/, to: REGISTER_TO },
   { id: 'M.early', readme: true, re: /early[ -]access/i, to: `drop it; say Claude Code ${FLOOR} or later` },
   { id: 'M.desc', re: /Needs function hooks[^"\n]*/, to: `drop it; say Claude Code ${FLOOR} or later in the README` }
 ]
+const DESC_RULE = { id: 'M.desc', re: /early[ -]access|function hooks/i, to: `drop it; say Claude Code ${FLOOR} or later in the README` }
+const HOOKS_CODE = /^hooks\/.*\.(js|mjs|ts|tsx)$/
 const MOD_TEXT = /\.(md|json|ts|tsx|js|mjs|cjs|mts|cts|jsx|sh|ya?ml|txt)$|^\.gitignore$/
 
 function liveSets(live) {
@@ -148,13 +164,25 @@ function scanMod(modDir) {
       if (ent.isDirectory()) { walk(r); continue }
       if (!ent.isFile() || !MOD_TEXT.test(ent.name)) continue
       const readme = /^readme/i.test(ent.name)
-      fs.readFileSync(path.join(modDir, r), 'utf8').split('\n').forEach((line, i) => {
+      const hooksCode = HOOKS_CODE.test(r)
+      const text = fs.readFileSync(path.join(modDir, r), 'utf8')
+      const lines = text.split('\n')
+      lines.forEach((line, i) => {
         for (const rule of MIGRATE_RULES) {
-          if (rule.readme && !readme) continue
+          if (rule.readme ? !readme : rule.hooks ? !hooksCode : false) continue
           const m = line.match(rule.re)
           if (m) found.push({ id: rule.id, file: r, line: i + 1, old: m[0].trim(), to: rule.to })
         }
       })
+      if (ent.name === 'plugin.json') {
+        let desc
+        try { desc = JSON.parse(text).description } catch {}
+        const m = typeof desc === 'string' && desc.match(DESC_RULE.re)
+        const line = Math.max(0, lines.findIndex(l => /"description"\s*:/.test(l))) + 1
+        if (m && !found.some(f => f.id === 'M.desc' && f.file === r && f.line === line)) {
+          found.push({ id: DESC_RULE.id, file: r, line, old: m[0], to: DESC_RULE.to })
+        }
+      }
     }
   }
   walk('')
@@ -254,6 +282,10 @@ export function formatApiCheck(res) {
   return out.join('\n')
 }
 
+// --help prints the id list from the header above, so the two never disagree.
+const migrateIds = () => fs.readFileSync(new URL(import.meta.url), 'utf8').split('\n')
+  .filter(l => /^\/\/ {3}M\./.test(l)).map(l => '  ' + l.slice(5)).join('\n')
+
 // process.exitCode, not process.exit: stdout to a pipe is asynchronous on macOS and
 // an early exit cuts the report short.
 if (isMain(import.meta)) {
@@ -261,7 +293,7 @@ if (isMain(import.meta)) {
   try {
     args = parseArgs(process.argv.slice(2), { flags: ['write-baseline', 'json', 'help'], values: ['types', 'baseline', 'refs', 'skill', 'mod'] })
   } catch (e) { console.error(`${e.message}\n${USAGE}`); process.exitCode = 2 }
-  if (args?.help) console.log(USAGE)
+  if (args?.help) console.log(`${USAGE}\n\nMIGRATE ids printed by --mod:\n${migrateIds()}`)
   else if (args) {
     try {
       const res = runApiCheck({ ...args, writeBaseline: args['write-baseline'] })

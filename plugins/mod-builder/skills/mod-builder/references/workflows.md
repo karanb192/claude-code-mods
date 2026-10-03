@@ -7,7 +7,7 @@ Read this for Learn, Discover, Review, Debug, Migrate, Publish or Brainstorm. AP
 Answer in this order, in a few sentences:
 
 1. A mod is a Claude Code plugin whose hooks module runs inside Claude Code and handles the engine's events as functions `($, e, next)`.
-2. A skill gives Claude instructions. A settings hook runs a shell command on a classic event. An MCP server gives Claude tools. A mod can observe, rewrite or answer engine events, call `$`, and draw in the terminal and the Desktop Code tab. [src: docs overview > Compare mods, settings hooks, skills, and MCP servers | checked 2.1.288 | recheck: the overview's comparison table gains or loses a row]
+2. A skill gives Claude instructions. A settings hook is a shell command, HTTP request or prompt that Claude Code runs on a lifecycle event (admins also see agent hooks). An MCP server gives Claude tools. A mod can observe, rewrite or answer engine events, call `$`, and draw in the terminal and the Desktop Code tab. [src: docs overview > Compare mods, settings hooks, skills, and MCP servers; docs admin (hook types) | checked 2.1.288 | recheck: the overview's comparison table gains or loses a row]
 3. The version: the floor the gate prints or later; mods are on by default and the early-access flag is ignored. Run `node <skill-dir>/scripts/gate.mjs` to show the user's own build. [src: docs overview > Turn mods on or off | checked 2.1.288 | recheck: gate's floor line changes]
 4. Link the overview first: https://code.claude.com/docs/en/plugins/mods/overview. Link the catalogue only when the user asks for examples or existing mods.
 
@@ -43,15 +43,15 @@ State the chosen form and why. Mod: continue with Build at step 1. Anything else
 **A mod written for early access.**
 
 1. Run `claude plugin validate <dir>`. The duplicate-hook, dynamic-import and name-prefix refusals come from here with exact text; `limits.md` maps each to its fix.
-2. Run `node <skill-dir>/scripts/api-check.mjs --mod <dir>`. Each `MIGRATE <id> <file>:<line>: <old> -> <new>` line is one early-access spelling; `migrate.md` holds the table behind the ids.
+2. Run `node <skill-dir>/scripts/api-check.mjs --mod <dir>`. Each `MIGRATE <id> <file>:<line>: <old> -> <new>` line is one early-access spelling; `migrate.md` holds the table behind every id it prints, `M.early` included.
 3. Apply each row. A hit that is not really the old form stays, with one sentence why.
-4. Run the Build pipeline from step 4 through the handoff. The typecheck stage catches an untyped `register` and an old tsconfig include.
+4. Run the Build pipeline from step 4 through the handoff. The typecheck stage also catches an untyped `register` and an old tsconfig include that the scan missed.
 
 ## Debug
 
 Debug in this order and stop at the first step that names the cause:
 
-1. `claude plugin validate <dir>`. Paste the exact error. A pass with no `hooks:` line means `hooks/hooks.json` has no `modules` key. [src: docs troubleshoot > `validate` passes and lists no `hooks` line | checked 2.1.288 | recheck: a mod without modules prints a hooks line]
+1. `claude plugin validate <dir>`. Paste the exact error. A pass with no `hooks:` line means `hooks/hooks.json` has settings hooks and no `modules` key; a file with neither key fails. [src: docs troubleshoot > `validate` passes and lists no `hooks` line | checked 2.1.288 | recheck: a mod without modules prints a hooks line]
 2. `node <skill-dir>/scripts/gate.mjs <dir>`: the floor, and whether mods can load at all. `no hooks module to load` from an empty dir means they can; `turned off here` names a setting; `turned off in this process` means installed mods were switched off remotely. [src: docs troubleshoot > Check whether mods can load | checked 2.1.288 | recheck: gate's mods load line shows a message not in limits.md]
 3. Load with a debug log: `claude --debug-file ./mod-debug.log --plugin-dir <dir>`, then `grep -n '<name>' ./mod-debug.log` for `not loaded:`, `did not load`, `hook skipped:`, `refused by`, `does not validate` and `no command.run hook answered it`. Or run `node <skill-dir>/scripts/prove.mjs <dir>`, which does the same in an isolated home and keeps the log as `evidence/load.log`.
 4. Know where the failure line appears: dim in the transcript only in a session that hot-reloads a plugin directory; otherwise only in the debug log; on stderr in a `claude -p --plugin-dir` text run. [src: docs troubleshoot > Find out why a mod does nothing | checked 2.1.288 | recheck: a skipped hook in an installed mod prints a transcript line]
@@ -70,7 +70,7 @@ Review an existing mod in this order. Report findings by severity, each with the
 1. Footprint against the README: take the README's "What it can reach" section (Surface, Reach, Sees, Env, State) as the plan and run `footprint.mjs <dir> --plan '...' --env '...' --state '...'`. Every call, env name or state key the README does not explain is a finding.
 2. Each event against `events.md`. Flag unbounded visibility, such as a bare `tool.call`, `prompt.submit`, `session.append` or `skill.prompt`, or a `*` hook, where a matcher would do the job.
 3. Each call against `nouns.md`. Flag a call of higher reach than the job needs, an unnamed network host, and non-literal input in a process argument, path, URL or prompt.
-4. `next`. Flag a hook that never calls `next(e)` on an event core must act on, unless it deliberately answers; flag a return while `next` is pending, which aborts what runs beneath. A deliberate second `next(e)` on `tool.call` is a retry, not a finding. A hook whose failure the user must notice has a `.catch`, which gets a 1 s grace. [src: docs events > Guard or change a tool call; d.ts HookBudget | checked 2.1.288 | recheck: gate prints a drift line for HookBudget]
+4. `next`. Flag a hook that never calls `next(e)` on an event core must act on, unless it deliberately answers; flag a return while `next` is pending, which aborts what runs beneath. A deliberate second `next(e)` on `tool.call` is a retry, not a finding. A hook whose failure the user must notice has a `.catch`, which gets a 1 s grace. [src: docs events > Guard or change a tool call; d.ts HookBudget | checked 2.1.288 | recheck: a grep for HookBudget in the types finds nothing]
 5. `api-check.mjs --mod <dir>` for early-access spellings.
 6. The threat model and README against the footprint. A missing claim is a finding even when the code is harmless.
 7. `prove.mjs <dir>` (validate, load, typecheck, test). Paste the status block and state what it did not prove.
@@ -87,7 +87,7 @@ Publishing is a handoff, never an automatic release, push or post. Before asking
 - `version` in `plugin.json` is higher than the last installed copy, because installed copies are cached by version.
 - The name does not start with `claude-`, `anthropic-`, `anthropics-` or `cc-plugin-`.
 - No secret, token or user-controlled text reaches a process argument, path, URL or prompt.
-- For the installed route, `prove.mjs <dir> --install` runs an install smoke through a temporary marketplace under the harness home (it needs the harness login).
+- For the installed route, `prove.mjs <dir> --install` runs an install smoke through a temporary marketplace under the harness home. It needs no login: it passes on the debug log's loaded line.
 
 [src: docs create > Share your mod; observed for the prefix list | checked 2.1.288 | recheck: validate passes a name with one of these prefixes]
 

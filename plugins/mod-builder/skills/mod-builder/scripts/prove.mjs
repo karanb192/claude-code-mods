@@ -440,9 +440,14 @@ function loggedIn(ctx) {
   try { return JSON.parse(r.stdout).loggedIn === true } catch { return r.code === 0 && !/not logged in/i.test(r.stdout + r.stderr) }
 }
 
-function stageInteractive(ctx) {
+// A pane or band (a ui.render hook, or a $.ui.open call) needs the interactive stage to be done.
+function stageInteractive(ctx, report) {
   const { name, run, ev, claude, home, script } = ctx
-  if (!script) return na('not requested')
+  if (!script) {
+    if (!report) return unverified('validate gave no footprint; no --interactive script was run')
+    if (report.hooks.some(h => h.event === 'ui.render') || report.calls.includes('$.ui.open')) return unverified('the mod draws; no --interactive script was run')
+    return na(report.calls.some(c => DRAW_CALLS.includes(c)) ? 'no ui.render hook or $.ui.open call' : 'draws nothing')
+  }
   if (IS_WIN) return unverified('the interactive stage does not run on Windows')
   if (!loggedIn(ctx)) return unverified('harness home not logged in')
   const sock = `mod-builder-${process.pid}`

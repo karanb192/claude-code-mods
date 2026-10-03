@@ -49,8 +49,8 @@ export const FIRST_RUN = [
   { id: 'login', re: /Select login method:/, why: 'harness home not logged in' },
   // string in the 2.1.288 binary, not yet seen on screen here
   { id: 'apiKey', re: /Detected a custom API key in your environment|Do you want to use this API key\?/, why: 'an API key in the environment asks for approval; unset it or log in the harness home' },
-  // string in the 2.1.288 binary, not yet seen on screen here; Enter keeps "Yes, I trust this folder"
-  { id: 'trust', re: /project you created or one you trust/i, keys: ['Enter'] }
+  // observed on 2.1.288, on screen: the dialog highlights "No, exit" first, so Down then Enter picks "Yes, I trust this folder"
+  { id: 'trust', re: /project you created or one you trust/i, keys: ['Down', 'Enter'] }
 ]
 // string in the 2.1.288 binary, not yet seen on screen here: the footer of an idle prompt
 export const READY = /\? for shortcuts/

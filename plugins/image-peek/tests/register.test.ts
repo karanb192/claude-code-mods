@@ -10,9 +10,9 @@ const command = (args: string): CommandRunInput => ({
   command: 'image-peek', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 180 },
 });
 
-function world(on: Parameters<TestBody>[1], terminal = 'ghostty') {
+function world(on: Parameters<TestBody>[1], terminal = 'ghostty', env: Record<string, string> = {}) {
   const clock = mock.clock(on);
-  mock.env(on, { TERM_PROGRAM: terminal });
+  mock.env(on, { TERM_PROGRAM: terminal, ...env });
   let draft: PromptBox = { text: '', cursor: 0 };
   let state: PreviewSession | undefined;
   const processes: string[][] = [];
@@ -166,12 +166,38 @@ describe('image-peek', () => {
   });
 
   test('does not access the clipboard when disabled or in an unsupported terminal', async ($, on) => {
-    const w = world(on, 'iTerm.app');
+    const w = world(on, 'Apple_Terminal');
     await $.session.start(start);
     w.draft('[Image #1]');
     await w.clock.advance(240);
     expect(w.processes.filter(argv => argv.includes('capture'))).toHaveLength(0);
-    expect(w.logs[0]).toContain('macOS and Ghostty');
+    expect(w.logs[0]).toContain('macOS with Ghostty, iTerm2 or Herdr');
+  });
+
+  test('captures in iTerm2 with the renderer override and no Ghostty environment', async ($, on) => {
+    const w = world(on, 'iTerm.app', { CLAUDE_CODE_FORCE_TERMINAL_IMAGES: '1' });
+    await $.session.start(start);
+    w.draft('[Image #1]');
+    await w.clock.advance(120);
+    expect(w.state()?.images['1']?.path).toBe('/tmp/image-1.png');
+    expect(w.opened).toEqual(['image-peek']);
+    expect(w.logs).toHaveLength(0);
+  });
+
+  test('recognizes Herdr without inheriting its outer terminal name', async ($, on) => {
+    const w = world(on, 'herdr', { HERDR_ENV: '1', CLAUDE_CODE_FORCE_TERMINAL_IMAGES: '1' });
+    await $.session.start(start);
+    w.draft('[Image #1]');
+    await w.clock.advance(120);
+    expect(w.state()?.images['1']?.path).toBe('/tmp/image-1.png');
+    expect(w.opened).toEqual(['image-peek']);
+    expect(w.logs).toHaveLength(0);
+  });
+
+  test('explains the startup override even when Herdr inherits Ghostty identity', async ($, on) => {
+    const w = world(on, 'ghostty', { HERDR_ENV: '1' });
+    await $.session.start(start);
+    expect(w.logs[0]).toContain('CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1');
   });
 
   test('off stops capture and on resumes for the next pasted image', async ($, on) => {

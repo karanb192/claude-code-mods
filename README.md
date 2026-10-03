@@ -2,7 +2,7 @@
 
 Claude Mods and the tools to build them. Four plugins install from this marketplace:
 
-- [image-peek](plugins/image-peek): move the cursor onto a pasted image marker for a large preview pane, with an inline fallback in narrow windows. First version for macOS and Ghostty.
+- [image-peek](plugins/image-peek): move the cursor onto a pasted image marker for a large preview pane, with an inline fallback in narrow windows. macOS and Ghostty, with experimental iTerm2 and Herdr support via a startup override.
 - [fable-pin](plugins/fable-pin): pin subagents to one model.
 - [cache-tax](https://github.com/karanb192/cache-tax): price cold sends and keep the prompt cache warm for a window you set.
 - [mod-builder](plugins/mod-builder): plan a mod's capabilities, write it, and validate its footprint.

@@ -124,7 +124,7 @@ function draw($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt', 'termin
   const children = entry ? [
     Text({ ...textStyle, children: `Image #${active} · ${entry.width} × ${entry.height}` }),
     Image({ key: `image-${active}`, source: { file: entry.path, format: 'png' },
-      ...fitImage(entry.width, entry.height, columns, rows), alt: `Image #${active} preview requires Ghostty image support` }),
+      ...fitImage(entry.width, entry.height, columns, rows), alt: `Image #${active} · Terminal image rendering is unavailable. See Image Peek's terminal setup instructions.` }),
   ] : [Text({ ...textStyle, children: `Image #${active} · Preview unavailable. Paste it again to preview.` })];
   return Box({ flexDirection: 'column', flexShrink: 0,
     ...(pane ? { width: e.props.bodyColumns, height: bodyRows, backgroundColor: '#202327', alignItems: 'center', justifyContent: 'center' } as const
@@ -137,10 +137,16 @@ export const register: Register = on => {
     if (!e.isInteractive || e.surface !== 'terminal') return result;
     const terminal = await $.env.get('TERM_PROGRAM');
     const ghostty = await $.env.get('GHOSTTY_RESOURCES_DIR');
+    const herdr = await $.env.get('HERDR_ENV') === '1';
+    const iterm = terminal === 'iTerm.app';
+    const forced = await $.env.get('CLAUDE_CODE_FORCE_TERMINAL_IMAGES');
     const platform = await $.process.run(['/usr/bin/uname', '-s']);
-    if (platform.stdout.trim() !== 'Darwin' || (terminal !== 'ghostty' && !ghostty)) {
-      $.ui.log('Image Peek needs macOS and Ghostty. No clipboard access started.');
+    if (platform.stdout.trim() !== 'Darwin' || (terminal !== 'ghostty' && !ghostty && !iterm && !herdr)) {
+      $.ui.log('Image Peek needs macOS with Ghostty, iTerm2 or Herdr. No clipboard access started.');
       return result;
+    }
+    if ((herdr || iterm) && !forced) {
+      $.ui.log('Image Peek: iTerm2 and Herdr need a fresh Claude process launched with CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1. Use iTerm2 3.7.3+ or Herdr 0.9.1+ with graphics enabled in a compatible terminal.');
     }
     const id = await $.session.id();
     const stored = (await $.state.get(STATE)).value;

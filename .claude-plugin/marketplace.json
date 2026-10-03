@@ -10,7 +10,7 @@
     {
       "name": "image-peek",
       "source": "./plugins/image-peek",
-      "description": "Preview pasted images by moving the cursor onto their prompt markers. macOS and Ghostty. Reach L2: local clipboard capture and temporary image files, no model or network calls.",
+      "description": "Preview pasted images at their prompt markers on macOS. Ghostty, plus experimental iTerm2 and Herdr support with a startup override. Reach L2: local clipboard capture and temporary files, no model or network calls.",
       "category": "development",
       "tags": ["mods", "images", "clipboard", "ghostty", "macos"]
     },

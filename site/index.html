@@ -79,11 +79,11 @@ claude plugin install mod-builder@claude-code-mods<button data-copy="i1">Copy</b
 <article class="card" id="image-peek">
   <div class="row"><h3>image-peek</h3><span class="kind">mod · reach L2, local clipboard capture</span></div>
   <p>Move the text cursor onto a pasted <code>[Image #1]</code> marker for a large preview pane, with the image centered on a dark canvas. Move away to hide it. Narrow windows use an inline preview above the prompt. Keyboard focus stays in the prompt.</p>
-  <p>First version for macOS and Ghostty. It captures each new paste from the clipboard, so wait for the preview before copying another image. The large image and dark canvas have been confirmed in Ghostty. Claude's own theme controls the outer frame.</p>
+  <p>For macOS and Ghostty, with experimental iTerm2 and Herdr support using the startup override in the README. It captures each new paste from the clipboard, so wait for the preview before copying another image. The large image and dark canvas have been confirmed in Ghostty. Claude's own theme controls the outer frame.</p>
   <div class="cmds">/image-peek off
 /image-peek on</div>
   <dl class="meta">
-    <dt>Requires</dt><dd>macOS, Ghostty and Claude Code 2.1.287 or later. No separate app or browser.</dd>
+    <dt>Requires</dt><dd>macOS and Claude Code 2.1.287+. Ghostty, or iTerm2 3.7.3+ / local Herdr 0.9.1+ with the documented override. No separate app or browser.</dd>
     <dt>Privacy</dt><dd>Temporary local PNG files, up to 24 per session. No network or model calls. Normal session exit removes the files.</dd>
   </dl>
   <div class="links"><a href="https://github.com/karanb192/claude-code-mods/tree/main/plugins/image-peek">README, limitations, validator output and threat model</a></div>

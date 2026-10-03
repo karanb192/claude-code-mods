@@ -17,11 +17,15 @@ function world(on: Parameters<TestBody>[1], terminal = 'ghostty') {
   let state: PreviewSession | undefined;
   const processes: string[][] = [];
   const opened: string[] = [];
+  const widths: number[] = [];
+  const focusRequests: boolean[] = [];
   const closed: string[] = [];
   const logs: string[] = [];
   let captures = 0;
   let captureFails = false;
   let cleanupFails = false;
+  let placed = true;
+  let paneOpen = false;
   on('session.start', (_, e) => ({ cwd: e.cwd }));
   on('session.id', () => ({ value: sessionId }));
   on('prompt.read', () => ({ value: draft }));
@@ -38,19 +42,21 @@ function world(on: Parameters<TestBody>[1], terminal = 'ghostty') {
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } };
   });
   on('command.register', (_, e) => ({ value: { command: e.name } }));
-  on('ui.open', (_, e) => { opened.push(e.id); return { value: { isPlaced: true } }; });
-  on('ui.close', (_, e) => { closed.push(e.id); return { value: undefined }; });
+  on('ui.open', (_, e) => { opened.push(e.id); widths.push(e.columns ?? 0); focusRequests.push(e.focus === true); paneOpen = true; return { value: placed ? { isPlaced: true } : { isPlaced: false, reason: 'narrow' } }; });
+  on('ui.close', (_, e) => { closed.push(e.id); paneOpen = false; return { value: undefined }; });
+  on('ui.panes', () => ({ value: paneOpen ? [{ id: 'image-peek', title: 'Image', isPlaced: placed, isShown: placed, isFocused: false }] : [] }));
   on('ui.log', (_, e) => { logs.push(e.text); return { value: undefined }; });
   on('ui.render', () => ({ type: 'Text', props: {}, children: [] }));
   on('session.end', (_, e) => ({ sessionId: e.sessionId }));
   on('prompt.edit', (_, e) => ({ text: e.text.slice(0, e.start) + e.inputText + e.text.slice(e.end), cursor: e.start + e.inputText.length }));
   on('prompt.fill', () => ({ isFilled: true, text: '[Image #1]', cursor: 10 }));
   return {
-    clock, processes, opened, closed, logs,
+    clock, processes, opened, widths, focusRequests, closed, logs,
     draft: (text: string, cursor = text.length) => { draft = { text, cursor }; },
     state: () => state,
     captureFails: () => { captureFails = true; },
     cleanupFails: () => { cleanupFails = true; },
+    narrow: () => { placed = false; },
   };
 }
 
@@ -75,13 +81,13 @@ describe('image-peek', () => {
     w.draft('[Image #1] hello', 10);
     await w.clock.advance(120);
     expect(w.state()?.images['1']?.path).toBe('/tmp/image-1.png');
-    expect(w.opened).toEqual([]);
+    expect(w.opened).toEqual(['image-peek']);
     w.draft('[Image #1] hello');
     await w.clock.advance(120);
-    expect(w.closed).toEqual(['image-peek']);
+    expect(w.closed).toEqual(['image-peek', 'image-peek']);
     w.draft('[Image #1] hello', 0);
     await w.clock.advance(120);
-    expect(w.opened).toHaveLength(0);
+    expect(w.opened).toHaveLength(2);
     expect(w.processes.filter(argv => argv.includes('capture'))).toHaveLength(1);
   });
 
@@ -96,22 +102,39 @@ describe('image-peek', () => {
     expect(w.state()?.images['2']?.path).toBe('/tmp/image-2.png');
   });
 
-  test('fits the Image above the prompt without opening a full-height pane', async ($, on) => {
+  test('fits a large Image in a dark pane without taking keyboard focus', async ($, on) => {
     const w = world(on);
     await $.session.start(start);
     w.draft('[Image #1]');
     await w.clock.advance(120);
-    const ui = await $.ui.mount({ plugin: 'image-peek', surface: 'terminal', component: 'AbovePrompt',
-      props: { hasSurvey: false, isWorking: false, maxRows: 32, bodyColumns: 180, scroll: { offset: 0, bodyRows: 32 }, view: {} },
-      viewport: { columns: 180, rows: 80, isFullscreen: true } });
+    const ui = await $.ui.mount({ plugin: 'image-peek', surface: 'terminal', component: 'Pane', requestId: 'image-peek',
+      props: { title: 'Image #1', isFocused: false, bodyColumns: 128, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
+      viewport: { columns: 51, rows: 48, isFullscreen: true } });
     const image = await ui.find({ type: 'Image' });
     expect(image?.props.source).toEqual({ file: '/tmp/image-1.png', format: 'png' });
-    expect(image?.props.columns).toBe(93);
-    expect(image?.props.rows).toBe(31);
-    expect(w.opened).toEqual([]);
+    expect(image?.props.columns).toBe(117);
+    expect(image?.props.rows).toBe(39);
+    expect(w.widths[0]).toBeGreaterThan(100);
+    expect(w.focusRequests).toEqual([false]);
+    const box = await ui.find({ type: 'Box' });
+    expect(box?.props.backgroundColor).toBe('#202327');
+    expect(box?.props.height).toBe(40);
     w.draft('[Image #1] hello');
     await w.clock.advance(120);
     expect(await ui.find({ type: 'Image' })).toBeUndefined();
+    await ui.unmount();
+  });
+
+  test('keeps an inline preview when the terminal cannot place the large pane', async ($, on) => {
+    const w = world(on);
+    w.narrow();
+    await $.session.start(start);
+    w.draft('[Image #1]');
+    await w.clock.advance(120);
+    const ui = await $.ui.mount({ plugin: 'image-peek', surface: 'terminal', component: 'AbovePrompt',
+      props: { hasSurvey: false, isWorking: false, maxRows: 15, bodyColumns: 80, scroll: { offset: 0, bodyRows: 14 }, view: {} },
+      viewport: { columns: 80, rows: 48, isFullscreen: true } });
+    expect((await ui.find({ type: 'Image' }))?.props.rows).toBe(14);
     await ui.unmount();
   });
 
@@ -166,6 +189,7 @@ describe('image-peek', () => {
 
   test('renders an unavailable preview after capture fails, without repeating the process', async ($, on) => {
     const w = world(on);
+    w.narrow();
     w.captureFails();
     await $.session.start(start);
     w.draft('[Image #1]');

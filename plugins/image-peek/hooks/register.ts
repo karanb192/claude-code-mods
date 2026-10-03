@@ -22,6 +22,9 @@ function imageResult(text: string): PreviewImage | null {
 
 let session = blank();
 let active: string | null = null;
+let docked = false;
+let dismissed: string | null = null;
+let viewport = { columns: 180, rows: 48 };
 let busy = false;
 let ready = false;
 let generation = 0;
@@ -35,6 +38,8 @@ async function save($: EngineInterface) {
 
 async function close($: EngineInterface) {
   active = null;
+  docked = false;
+  await $.ui.close({ id: PANE });
   $.ui.invalidate('ui.render');
 }
 
@@ -50,6 +55,7 @@ async function reset($: EngineInterface) {
   generation++;
   const ending = session.sessionId;
   session = blank();
+  dismissed = null;
   lastDraft = '';
   lastCursor = -1;
   try { await close($); await save($); }
@@ -88,9 +94,17 @@ async function update($: EngineInterface) {
     const current = await $.prompt.read();
     if (epoch !== generation) return;
     const id = session.enabled ? selectedImage(current.text, current.cursor) : null;
-    if (id === active) return;
+    if (id !== dismissed) dismissed = null;
+    if (id === active || (id !== null && id === dismissed)) return;
     if (!id) { await close($); return; }
     active = id;
+    const entry = session.images[id];
+    const columns = entry
+      ? fitImage(entry.width, entry.height, Math.floor(viewport.columns * 0.72) - 2, viewport.rows - 8).columns + 2
+      : 64;
+    const opened = await $.ui.open({ id: PANE, title: `Image #${id}`, columns });
+    if (epoch !== generation) return;
+    docked = opened.isPlaced;
     $.ui.invalidate('ui.render');
   } catch {
     await close($);
@@ -99,17 +113,22 @@ async function update($: EngineInterface) {
   } finally { busy = false; }
 }
 
-function draw($: EngineInterface, e: RenderInput<'AbovePrompt', 'terminal'>) {
+function draw($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt', 'terminal'>) {
   const { Box, Text, Image } = $.ui.resolve(e);
   const entry = active ? session.images[active] : null;
   const columns = Math.max(1, e.props.bodyColumns - 2);
-  const rows = Math.max(1, e.props.maxRows - 1);
-  if (!entry) return Text({ dimColor: true, children: `Image #${active} · Preview unavailable. Paste it again to preview.` });
-  const size = fitImage(entry.width, entry.height, columns, rows);
-  return Box({ flexDirection: 'column', alignItems: 'flex-start', flexShrink: 0, children: [
-    Text({ dimColor: true, children: `Image #${active} · ${entry.width} × ${entry.height}` }),
-    Image({ key: `image-${active}`, source: { file: entry.path, format: 'png' }, ...size, alt: `Image #${active} preview requires Ghostty image support` }),
-  ] });
+  const pane = e.component === 'Pane';
+  const bodyRows = pane ? e.props.scroll.bodyRows : e.props.maxRows;
+  const rows = Math.max(1, bodyRows - 1);
+  const textStyle = pane ? { color: '#d1d5db' } : { dimColor: true };
+  const children = entry ? [
+    Text({ ...textStyle, children: `Image #${active} · ${entry.width} × ${entry.height}` }),
+    Image({ key: `image-${active}`, source: { file: entry.path, format: 'png' },
+      ...fitImage(entry.width, entry.height, columns, rows), alt: `Image #${active} preview requires Ghostty image support` }),
+  ] : [Text({ ...textStyle, children: `Image #${active} · Preview unavailable. Paste it again to preview.` })];
+  return Box({ flexDirection: 'column', flexShrink: 0,
+    ...(pane ? { width: e.props.bodyColumns, height: bodyRows, backgroundColor: '#202327', alignItems: 'center', justifyContent: 'center' } as const
+      : { alignItems: 'flex-start' } as const), children });
 }
 
 export const register: Register = on => {
@@ -196,9 +215,33 @@ export const register: Register = on => {
   });
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (!active || e.surface !== 'terminal' || e.props.hasSurvey || e.props.maxRows < 2) return next(e);
+    if (e.surface !== 'terminal') return next(e);
+    if (!docked && e.viewport) viewport = { columns: e.viewport.columns, rows: e.viewport.rows };
+    if (!active || e.props.hasSurvey || e.props.maxRows < 2) return next(e);
+    const panes = await $.ui.panes();
+    docked = panes.some(pane => pane.id === PANE && pane.isPlaced);
+    if (docked) return next(e);
     const other = await next(e);
     const { Box } = $.ui.resolve(e);
     return Box({ flexDirection: 'column', children: [other, draw($, e)] });
+  });
+
+  on('ui.render', { component: 'Pane', requestId: PANE }, ($, e, next) => {
+    if (!active || e.surface !== 'terminal') return next(e);
+    if (e.props.placement === 'dock' && e.viewport) {
+      viewport = { columns: e.viewport.columns + e.props.bodyColumns + 1, rows: e.viewport.rows };
+    }
+    if (!docked) { docked = true; $.ui.invalidate('ui.render'); }
+    return draw($, e);
+  });
+
+  on('ui.close', { id: PANE }, ($, e, next) => {
+    if (e.origin.kind === 'person') {
+      dismissed = active;
+      active = null;
+      docked = false;
+      $.ui.invalidate('ui.render');
+    }
+    return next(e);
   });
 };

@@ -1,6 +1,6 @@
 # Image Peek
 
-Move the text cursor onto a pasted `[Image #1]` marker to see its image. Move away to hide it. The preview sits directly above the prompt, aligned with its left edge, and uses only the rows its image needs. Keyboard focus stays in the prompt.
+Move the text cursor onto a pasted `[Image #1]` marker to see its image. Move away to hide it. Wide windows get a large preview pane with the image centered on a dark canvas. Narrow windows use the area above the prompt. Keyboard focus stays in the prompt.
 
 This first version targets macOS and Ghostty with Claude Code 2.1.287 or later. Cursor selection, native paste, reload and cleanup have been exercised in the actual Claude CLI. User-provided screenshots confirmed image rendering in Ghostty in both layouts. **The latest sizing adjustment still needs a visual check.**
 
@@ -29,7 +29,9 @@ claude --plugin-dir ./plugins/image-peek
 2. Use the arrow keys to put the text cursor inside or directly beside its `[Image #N]` marker. The preview appears automatically.
 3. Move into the surrounding text to hide it. Return to the marker to see the same cached image.
 
-This follows the text cursor, not mouse hover. The conversation remains visible above the preview. The entire image is fitted to the available width and height, reserving one row for its label. There is no fixed image-height cap. Claude limits the above-prompt area to roughly half the terminal height, including the prompt. There is no zoom, floating overlay or full-height side panel.
+This follows the text cursor, not mouse hover. The conversation remains visible beside or above the preview. The whole image fits within the available width and height, reserving one row for its label. The pane requests up to about 72% of the window's width, adjusted for the image's proportions. Claude may retain a width you previously chose; drag the divider if that makes the pane too narrow.
+
+The inline fallback is smaller because Claude limits the above-prompt area to roughly half the terminal height, including the prompt and other bottom content. There is no zoom or floating overlay. Closing the pane dismisses it until the cursor leaves the marker.
 
 `/image-peek off` stops new captures and hides the preview. `/image-peek on` resumes capture for new pastes. `/image-peek` reports the current setting. These commands do not call a model.
 
@@ -59,8 +61,8 @@ The strict validator on Claude Code 2.1.287 reported:
 ```text
   ❯ types ./types/index.d.ts declares on $: nothing (no EngineInterface member)
   ❯ types ./types/index.d.ts declares state: image-peek.session
-  ❯ ./register.ts hooks: session.start, prompt.edit, prompt.fill, command.run{command=image-peek}, session.end, session.compact, ui.render{component=AbovePrompt}
-  ❯ ./register.ts calls: $.clock.every, $.command.register, $.env.get, $.process.run, $.prompt.read, $.session.id, $.state.get, $.state.set (via save), $.ui.close, $.ui.invalidate (via close, update), $.ui.log, $.ui.resolve
+  ❯ ./register.ts hooks: session.start, prompt.edit, prompt.fill, command.run{command=image-peek}, session.end, session.compact, ui.render{component=AbovePrompt}, ui.render{component=Pane, requestId=image-peek}, ui.close{id=image-peek}
+  ❯ ./register.ts calls: $.clock.every, $.command.register, $.env.get, $.process.run, $.prompt.read, $.session.id, $.state.get, $.state.set (via save), $.ui.close, $.ui.invalidate, $.ui.log, $.ui.open (via update), $.ui.panes, $.ui.resolve
   ❯ ./register.ts env writes: nothing
   ❯ ./register.ts env reads: GHOSTTY_RESOURCES_DIR, TERM_PROGRAM
   ❯ ./register.ts state writes: image-peek.session
@@ -69,7 +71,9 @@ The strict validator on Claude Code 2.1.287 reported:
 
 Tests cover cursor boundaries, separate captures, ambiguous pastes, typed marker substitutes, unsupported terminals, enable/disable, failed capture, cache eviction and cleanup failure. A live CLI check also exercised native image paste, leaving and returning to the marker, hot reload and normal-exit cleanup. That terminal rendered the Image element's alternative text, so it did not verify image pixels. No model turn was submitted during these checks.
 
-The remaining visual check is to paste two distinct images in Ghostty, select each marker, resize the window, and confirm the compact preview appears and disappears without moving keyboard focus. Repeat with conversation output above the prompt. On reload, the plugin closes any pane left from its earlier layout.
+A controlled layout probe in the actual CLI used the same 180-column, 48-row terminal for both surfaces. The inline area settled at 15 rows and fitted a landscape image into 50 by 14 cells. A requested 128-column pane provided a 128 by 40 cell body and fitted that image into 126 by 34 cells. This verifies available layout space, not rendered pixels or colors.
+
+The remaining visual check is to paste two distinct images in Ghostty, select each marker, resize the window, and confirm the larger dark preview appears and disappears without moving keyboard focus. Repeat with conversation output above the prompt. On reload, the plugin closes any pane left from its earlier layout.
 
 ## Threat model
 

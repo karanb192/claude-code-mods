@@ -103,7 +103,7 @@ function draw($: EngineInterface, e: RenderInput<'AbovePrompt', 'terminal'>) {
   const { Box, Text, Image } = $.ui.resolve(e);
   const entry = active ? session.images[active] : null;
   const columns = Math.max(1, e.props.bodyColumns - 2);
-  const rows = Math.max(1, Math.min(18, e.props.maxRows - 1));
+  const rows = Math.max(1, e.props.maxRows - 1);
   if (!entry) return Text({ dimColor: true, children: `Image #${active} · Preview unavailable. Paste it again to preview.` });
   const size = fitImage(entry.width, entry.height, columns, rows);
   return Box({ flexDirection: 'column', alignItems: 'flex-start', flexShrink: 0, children: [

@@ -102,12 +102,12 @@ describe('image-peek', () => {
     w.draft('[Image #1]');
     await w.clock.advance(120);
     const ui = await $.ui.mount({ plugin: 'image-peek', surface: 'terminal', component: 'AbovePrompt',
-      props: { hasSurvey: false, isWorking: false, maxRows: 20, bodyColumns: 180, scroll: { offset: 0, bodyRows: 20 }, view: {} },
-      viewport: { columns: 180, rows: 40, isFullscreen: true } });
+      props: { hasSurvey: false, isWorking: false, maxRows: 32, bodyColumns: 180, scroll: { offset: 0, bodyRows: 32 }, view: {} },
+      viewport: { columns: 180, rows: 80, isFullscreen: true } });
     const image = await ui.find({ type: 'Image' });
     expect(image?.props.source).toEqual({ file: '/tmp/image-1.png', format: 'png' });
-    expect(image?.props.columns).toBe(54);
-    expect(image?.props.rows).toBe(18);
+    expect(image?.props.columns).toBe(93);
+    expect(image?.props.rows).toBe(31);
     expect(w.opened).toEqual([]);
     w.draft('[Image #1] hello');
     await w.clock.advance(120);

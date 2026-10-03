@@ -2,7 +2,7 @@
 
 Move the text cursor onto a pasted `[Image #1]` marker to see its image. Move away to hide it. The preview sits directly above the prompt, aligned with its left edge, and uses only the rows its image needs. Keyboard focus stays in the prompt.
 
-This first version targets macOS and Ghostty with Claude Code 2.1.287 or later. Cursor selection, native paste, reload and cleanup have been exercised in the actual Claude CLI. Image rendering in Ghostty was confirmed in a user-provided screenshot of the initial side-pane layout. **The revised above-prompt layout still needs a visual check.**
+This first version targets macOS and Ghostty with Claude Code 2.1.287 or later. Cursor selection, native paste, reload and cleanup have been exercised in the actual Claude CLI. User-provided screenshots confirmed image rendering in Ghostty in both layouts. **The latest sizing adjustment still needs a visual check.**
 
 ## Install
 
@@ -29,7 +29,7 @@ claude --plugin-dir ./plugins/image-peek
 2. Use the arrow keys to put the text cursor inside or directly beside its `[Image #N]` marker. The preview appears automatically.
 3. Move into the surrounding text to hide it. Return to the marker to see the same cached image.
 
-This follows the text cursor, not mouse hover. The conversation remains visible above the preview. The entire image is fitted to the available width and at most 18 image rows; shorter images use fewer rows. There is no zoom, floating overlay or full-height side panel.
+This follows the text cursor, not mouse hover. The conversation remains visible above the preview. The entire image is fitted to the available width and height, reserving one row for its label. There is no fixed image-height cap. Claude limits the above-prompt area to roughly half the terminal height, including the prompt. There is no zoom, floating overlay or full-height side panel.
 
 `/image-peek off` stops new captures and hides the preview. `/image-peek on` resumes capture for new pastes. `/image-peek` reports the current setting. These commands do not call a model.
 

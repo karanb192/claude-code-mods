@@ -132,11 +132,11 @@ claude plugin install mod-builder@claude-code-mods<button data-copy="i1">Copy</b
 
 <article class="card" id="mod-builder">
   <div class="row"><h3>mod-builder</h3><span class="kind">skill · no hooks module</span></div>
-  <p>A skill that plans a mod's capability budget before a line is written, then validates the result and writes the threat model. Every idea must justify each process, file, network, model or UI capability it asks for; the plan states the reach level before code exists, and after the validator runs its printed calls line has to match the plan. It also explains what a Mod is, finds existing ones on the scoreboard, migrates a settings hook, reviews or debugs a mod, and brainstorms ideas against every mod already on GitHub. Both mods above were built with it.</p>
+  <p>A skill that plans a mod's capability budget before a line is written, proves the result in an isolated run, and writes the threat model. It starts with a gate that checks the installed Claude Code can load mods, generates that build's type declarations with a headless load, and reports whether its own references have drifted from them. Every event and method in the plan is grepped in those types before code exists; after the validator runs, its printed calls, env names and state keys have to match the plan. A harness then copies the mod, drives a child <code>claude</code> under its own config dir, and leaves one evidence file per stage (validate, load, typecheck, test, command, and on request an interactive terminal stage and an install smoke test); the handoff pastes the harness's status block unchanged. It also explains what a mod is, finds existing ones on the scoreboard, migrates an early-access mod or a settings hook, reviews or debugs a mod, and brainstorms ideas against every mod already on GitHub. Both mods above were built with it.</p>
   <div class="cmds">/mod-builder
-"what is a Mod"  "find a Mod for X"  "build a Mod that ..."  "review my Mod"  "migrate this hook"</div>
+"what is a mod"  "find a mod for X"  "build a mod that ..."  "prove my mod"  "review my mod"  "migrate this hook"</div>
   <dl class="meta">
-    <dt>Reach</dt><dd>A skill is instructions, not process code, so it has no footprint of its own. It runs <code>claude plugin validate</code> and the bundled <code>footprint.mjs</code> on the mod it is building.</dd>
+    <dt>Reach</dt><dd>A skill is instructions, not process code, so it has no footprint of its own. Its scripts run <code>claude plugin validate</code>, <code>claude plugin test</code> and a headless <code>claude -p</code> load on the mod it is building, under a config dir of their own.</dd>
   </dl>
   <div class="links">
     <a href="https://github.com/karanb192/claude-code-mods/tree/main/plugins/mod-builder/skills/mod-builder">SKILL.md and its reference files</a>

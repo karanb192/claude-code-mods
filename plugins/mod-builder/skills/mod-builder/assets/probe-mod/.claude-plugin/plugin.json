@@ -1,0 +1,8 @@
+{
+  "name": "probe-mod",
+  "version": "1.0.0",
+  "description": "[probe] Loaded headlessly by mod-builder so the engine writes the running build's types. Not a mod to install.",
+  "author": { "name": "mod-builder" },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

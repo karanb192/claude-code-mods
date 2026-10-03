@@ -1,0 +1,93 @@
+[
+  {
+    "id": "register.two-args",
+    "about": "Register",
+    "pattern": "export type Register = \\(on: On, options: PluginOptions\\) => unknown;",
+    "claim": "register receives two parameters, (on, options)",
+    "file": "references/build.md"
+  },
+  {
+    "id": "budget.ms",
+    "about": "HookBudget",
+    "pattern": "^      readonly ms: 10_000;",
+    "claim": "a hook's budget per dispatch is 10 s",
+    "file": "references/limits.md"
+  },
+  {
+    "id": "budget.catchMs",
+    "about": "HookBudget",
+    "pattern": "^      readonly catchMs: 1_000;",
+    "claim": "a .catch handler's grace is 1 s",
+    "file": "references/limits.md"
+  },
+  {
+    "id": "ui.resolve.sync",
+    "about": "CoreEngineInterface ui.resolve",
+    "pattern": "resolve: <E extends ResolveInput>\\(e: E\\) => Elements\\[E\\['surface'\\]\\];",
+    "claim": "$.ui.resolve(e) returns the surface's element table synchronously; no await",
+    "file": "references/ui-and-state.md"
+  },
+  {
+    "id": "agent.spawn.result",
+    "about": "AgentSpawnResult",
+    "pattern": "export type AgentSpawnResult = \\{[\\s\\S]{0,400}?model: string;[\\s\\S]{0,400}?agentId\\?: string;",
+    "claim": "agent.spawn resolves once the subagent started, with { model, agentId }; its answer is its own turn.complete",
+    "file": "references/events.md"
+  },
+  {
+    "id": "pane.floor",
+    "about": "UiOpenResult",
+    "pattern": "placed from 144 terminal columns \\(110 for an id[\\s\\S]{0,1500}?export type UiOpenResult = \\{",
+    "claim": "an unasked pane is placed from 144 terminal columns, 110 for an id the person opened before",
+    "file": "references/ui-and-state.md"
+  },
+  {
+    "id": "sessionEnd.bound",
+    "about": "SessionEndInput",
+    "pattern": "One short wall-clock bound \\(1\\.5 s by default\\) covers every hook[\\s\\S]{0,600}?export type SessionEndInput = \\{",
+    "claim": "session.end has one 1.5 s bound for the whole chain",
+    "file": "references/limits.md"
+  },
+  {
+    "id": "state.ownerOnly",
+    "about": "CoreEngineInterface state",
+    "pattern": "Any plugin\\s+(?:\\*\\s+)?reads any value; its owner alone writes it\\.[\\s\\S]{0,200}?state: \\{",
+    "claim": "any plugin reads a $.state value; only its owner writes it",
+    "file": "references/ui-and-state.md"
+  },
+  {
+    "id": "tiers",
+    "about": "TIERS",
+    "pattern": "const TIERS: readonly \\[\"prepend\", \"user\", \"append\", \"builtin\", \"core\"\\];",
+    "claim": "the five tiers, top to bottom: prepend, user, append, builtin, core",
+    "file": "references/events.md"
+  },
+  {
+    "id": "surfaces",
+    "about": "RenderSurface",
+    "pattern": "export type RenderSurface = 'terminal' \\| 'desktop' \\| 'mobile' \\| 'vscode';",
+    "claim": "four render surfaces: terminal, desktop, mobile, vscode",
+    "file": "references/ui-and-state.md"
+  },
+  {
+    "id": "invalidatable",
+    "about": "InvalidatableEventName",
+    "pattern": "export type InvalidatableEventName = RenderEventName \\| 'prompt\\.section' \\| 'prompt\\.context' \\| 'prompt\\.attachment' \\| 'tool\\.describe' \\| 'command\\.describe' \\| 'config\\.describe';",
+    "claim": "$.ui.invalidate takes seven event names: ui.render and six more",
+    "file": "references/ui-and-state.md"
+  },
+  {
+    "id": "process.run.timeout",
+    "about": "CoreEngineInterface process.run",
+    "pattern": "timeout 30 s by default, ten minutes at most",
+    "claim": "$.process.run times out after 30 s by default, 10 minutes at most",
+    "file": "references/limits.md"
+  },
+  {
+    "id": "store.cap",
+    "about": "CoreEngineInterface store.set",
+    "pattern": "a store over 4 MiB of JSON text in all",
+    "claim": "$.store holds at most 4 MiB of JSON text",
+    "file": "references/limits.md"
+  }
+]

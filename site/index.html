@@ -4,17 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>claude-code-mods: Claude Mods with their footprints printed</title>
-<meta name="description" content="A marketplace of Claude Mods, each shipped with the validator's own list of what it hooks and what it can reach: cache-tax keeps the prompt cache warm and prices a cold send, fable-pin pins subagents to one model, mod-builder plans a mod before writing it.">
+<meta name="description" content="Claude Mods with validator output and threat models: image-peek previews pasted images, cache-tax prices cold sends, fable-pin pins subagents to one model, and mod-builder helps build mods.">
 <link rel="canonical" href="https://claude-code-mods.karanbansal.in/">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23113d33'/><text x='16' y='23' font-family='Menlo,monospace' font-size='20' font-weight='600' text-anchor='middle' fill='%23cfe4da'>$</text></svg>">
 <meta property="og:type" content="website">
 <meta property="og:title" content="claude-code-mods: Claude Mods with their footprints printed">
-<meta property="og:description" content="Two Claude Mods and the skill that builds them, each with the validator's own list of what it hooks and reaches. cache-tax prices a cold send and keeps the prompt cache warm for a window you set; a ping read 75k tokens for two cents on a 74k-token Sonnet 5 session.">
+<meta property="og:description" content="Three Claude Mods and the skill that builds them, with validator output and threat models. Preview pasted images, price cold sends, and pin subagent models.">
 <meta property="og:url" content="https://claude-code-mods.karanbansal.in/">
 <meta property="og:image" content="https://hooks.karanbansal.in/brand/cache-tax-social-1280x640.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="claude-code-mods: Claude Mods with their footprints printed">
-<meta name="twitter:description" content="cache-tax prices a cold send and keeps the prompt cache warm for a window you set, one cache-shared ping per idle stretch. fable-pin pins subagents to one model. mod-builder plans a mod before writing it.">
+<meta name="twitter:description" content="image-peek previews pasted images. cache-tax prices cold sends and keeps the prompt cache warm. fable-pin pins subagents to one model. mod-builder helps build mods.">
 <meta name="twitter:image" content="https://hooks.karanbansal.in/brand/cache-tax-social-1280x640.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -58,22 +58,36 @@ footer{margin-top:64px;color:var(--muted);font-size:13px;max-width:70ch}
 </head>
 <body>
 <h1>Claude Mods, each shipped with the validator's own list of what it can reach</h1>
-<p class="lead">A Claude Mod is TypeScript that runs inside Claude Code's own process, hooking its events and calling its engine. Before any of that code runs, <code>claude plugin validate</code> prints the events it hooks and the <code>$</code> calls it makes. Every mod here carries that printout in its README, unedited, with a five-line threat model beside it. Three plugins, one marketplace.</p>
+<p class="lead">A Claude Mod is TypeScript that runs inside Claude Code's own process, hooking its events and calling its engine. Before any of that code runs, <code>claude plugin validate</code> prints the events it hooks and the <code>$</code> calls it makes. Every mod here carries that printout in its README, with a five-line threat model beside it. Four plugins, one marketplace.</p>
 <div class="top">
   <a href="https://github.com/karanb192/claude-code-mods">GitHub</a>
   <a href="https://mods.karanbansal.in/">The scoreboard: every mod on GitHub, graded by reach</a>
-  <a href="https://hooks.karanbansal.in/">The hooks marketplace, for plugins that need no flag</a>
+  <a href="https://hooks.karanbansal.in/">The settings-hooks marketplace</a>
 </div>
 
 <h2 id="install">Install</h2>
 <pre id="i1">claude plugin marketplace add karanb192/claude-code-mods
+claude plugin install image-peek@claude-code-mods
 claude plugin install cache-tax@claude-code-mods
 claude plugin install fable-pin@claude-code-mods
 claude plugin install mod-builder@claude-code-mods<button data-copy="i1">Copy</button></pre>
-<p class="flag">Mods are early access. No hooks module loads unless <code>CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1</code> is set, and the API can change between releases. The mod-builder skill is instructions only and needs no flag. To turn it on for every session, merge <code>{ "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }</code> into <code>~/.claude/settings.json</code>; that loads the hooks module of every installed plugin that ships one. For one session, prefix the command: <code>CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude</code>.</p>
+<p class="flag">Mods require Claude Code 2.1.287 or later and are enabled by default. These versions ignore the old <code>CLAUDE_CODE_ENABLE_FUNCTION_HOOKS</code> flag. See <a href="https://code.claude.com/docs/en/plugins/mods/overview#turn-mods-on-or-off">Anthropic's mod documentation</a>.</p>
 
 <h2 id="mods">The mods</h2>
 <div class="cards">
+
+<article class="card" id="image-peek">
+  <div class="row"><h3>image-peek</h3><span class="kind">mod · reach L2, local clipboard capture</span></div>
+  <p>Move the text cursor onto a pasted <code>[Image #1]</code> marker to preview its image. Move away to hide it. A wide window gets a side pane; a narrow one gets a preview above the prompt. Keyboard focus stays in the prompt.</p>
+  <p>First version for macOS and Ghostty. It captures each new paste from the clipboard, so wait for the preview before copying another image. Cursor behavior, native paste, reload and cleanup have been tested in the Claude CLI. Image pixels still need visual verification in Ghostty.</p>
+  <div class="cmds">/image-peek off
+/image-peek on</div>
+  <dl class="meta">
+    <dt>Requires</dt><dd>macOS, Ghostty and Claude Code 2.1.287 or later. No separate app or browser.</dd>
+    <dt>Privacy</dt><dd>Temporary local PNG files, up to 24 per session. No network or model calls. Normal session exit removes the files.</dd>
+  </dl>
+  <div class="links"><a href="https://github.com/karanb192/claude-code-mods/tree/main/plugins/image-peek">README, limitations, validator output and threat model</a></div>
+</article>
 
 <article class="card featured" id="cache-tax">
   <div class="row"><h3>cache-tax</h3><span class="kind">mod · reach L2, drives Claude</span></div>

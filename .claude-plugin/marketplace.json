@@ -8,6 +8,13 @@
   },
   "plugins": [
     {
+      "name": "image-peek",
+      "source": "./plugins/image-peek",
+      "description": "Preview pasted images by moving the cursor onto their prompt markers. macOS and Ghostty. Reach L2: local clipboard capture and temporary image files, no model or network calls.",
+      "category": "development",
+      "tags": ["mods", "images", "clipboard", "ghostty", "macos"]
+    },
+    {
       "name": "mod-builder",
       "source": "./plugins/mod-builder",
       "description": "A skill that plans, writes, validates and reviews a Claude Mod. Every idea must justify each process, file, network, model or UI capability it requests: plan first, smallest $ surface, validator output pasted, a five-line threat model. A brainstorm mode checks ideas against every mod already on GitHub.",

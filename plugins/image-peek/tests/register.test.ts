@@ -99,6 +99,23 @@ describe('image-peek', () => {
     expect(w.state()?.images['2']?.path).toBe('/tmp/image-2.png');
   });
 
+  test('draws the captured Image in a pane and removes it when the cursor leaves', async ($, on) => {
+    const w = world(on);
+    await $.session.start(start);
+    w.draft('[Image #1]');
+    await w.clock.advance(120);
+    const ui = await $.ui.mount({ plugin: 'image-peek', surface: 'terminal', component: 'Pane', requestId: 'image-peek',
+      props: { title: 'Image #1', isFocused: false, bodyColumns: 64, placement: 'dock', scroll: { offset: 0, bodyRows: 24 }, view: {} },
+      viewport: { columns: 180, rows: 40, isFullscreen: true } });
+    const image = await ui.find({ type: 'Image' });
+    expect(image?.props.source).toEqual({ file: '/tmp/image-1.png', format: 'png' });
+    expect(image?.props.columns).toBe(62);
+    w.draft('[Image #1] hello');
+    await w.clock.advance(120);
+    expect(await ui.find({ type: 'Image' })).toBeUndefined();
+    await ui.unmount();
+  });
+
   test('does not guess when two unseen image markers appear together', async ($, on) => {
     const w = world(on);
     await $.session.start(start);

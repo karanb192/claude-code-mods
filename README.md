@@ -1,11 +1,19 @@
 # claude-code-mods
 
-Claude Mods and the tools to build them. The first tool is `mod-builder`, a skill that plans a mod's capability budget before it writes a line, then validates the result and writes the threat model. The first mod is `fable-pin`, which pins every subagent to one model by rewriting `agent.spawn`. The second is `cache-tax`, the Mod form of the hook of the same name in claude-code-hooks, now maintained in its own repository at https://github.com/karanb192/cache-tax and still installed from this marketplace: it stops a cold send once with its price, keeps the 1-hour prompt cache alive for a window you set, and keeps score of what cold writes cost. Both were built with the skill and their READMEs carry the validator output and the threat model. All three install from this marketplace; the landing page is https://claude-code-mods.karanbansal.in/.
+Claude Mods and the tools to build them. Four plugins install from this marketplace:
+
+- [image-peek](plugins/image-peek): move the cursor onto a pasted image marker for a large preview pane, with an inline fallback in narrow windows. macOS and Ghostty, with experimental iTerm2 and Herdr support via a startup override.
+- [fable-pin](plugins/fable-pin): pin subagents to one model.
+- [cache-tax](https://github.com/karanb192/cache-tax): price cold sends and keep the prompt cache warm for a window you set.
+- [mod-builder](plugins/mod-builder): plan a mod's capabilities, write it, and validate its footprint.
+
+Each mod's README includes validator output and a threat model. The [landing page](https://claude-code-mods.karanbansal.in/) lists the plugins.
 
 ## Install
 
 ```sh
 claude plugin marketplace add karanb192/claude-code-mods
+claude plugin install image-peek@claude-code-mods
 claude plugin install mod-builder@claude-code-mods
 claude plugin install fable-pin@claude-code-mods
 claude plugin install cache-tax@claude-code-mods
@@ -19,7 +27,7 @@ a session, or type `/mod-builder`.
 
 A Claude Mod is a Claude Code plugin whose `hooks/hooks.json` names a TypeScript module. The module exports `register(on)`, and each hook is `on("event", matcher, async ($, e, next) => result)`. `$` is the engine interface, an object of nouns with verbs on each (`$.ui.log`, `$.fs.write`, `$.process.run`, `$.http.fetch`, `$.model.classify`, `$.agent.spawn`). `e` is the event. `next(e)` runs every hook beneath and then the engine, and returning without `next` answers in the engine's place. The code runs inside Claude Code's own process, with the process's reach, and costs no tokens unless it calls the model.
 
-Anthropic calls the primitive function hooks. The design thread opened on 2026-09-03 and the built-in mods landed in the claude-code repo on 2026-09-09. It is early access. Nothing loads unless `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` is set, and the API can change between releases. The design thread is https://github.com/anthropics/claude-code/issues/91870.
+Mods require Claude Code 2.1.287 or later and are enabled by default. The old `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` flag is ignored by these versions. See [Anthropic's mod documentation](https://code.claude.com/docs/en/plugins/mods/overview#turn-mods-on-or-off).
 
 ## Why a budget
 
@@ -83,7 +91,7 @@ Threat model for hello-mod (reach L0, draws and remembers)
 5. Hostile input: a crafted Bash command can only match or not match one literal string; nothing from e reaches a process, a file or the network
 ```
 
-Load it for one session with `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .`. The same mod, validated on Claude Code 2.1.272, lives at https://github.com/karanb192/awesome-claude-code-mods/tree/main/examples/hello-mod.
+Load it for one session with `claude --plugin-dir .`. The same mod, originally validated on Claude Code 2.1.272, lives at https://github.com/karanb192/awesome-claude-code-mods/tree/main/examples/hello-mod.
 
 ## What is in the skill
 

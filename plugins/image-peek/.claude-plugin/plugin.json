@@ -1,0 +1,8 @@
+{
+  "name": "image-peek",
+  "version": "0.1.0",
+  "description": "Preview pasted images at their prompt markers on macOS. Ghostty, plus experimental iTerm2 and Herdr support with a startup override. Claude Code 2.1.287+.",
+  "author": { "name": "Karan Bansal" },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

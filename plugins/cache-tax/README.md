@@ -1,6 +1,6 @@
 # cache-tax has its own repository
 
-The Mod now lives at https://github.com/karanb192/cache-tax, with its landing page at https://cache-tax.karanbansal.in/. This marketplace still serves it, so the install commands are unchanged:
+The Mod now lives at https://github.com/karanb192/cache-tax, with its landing page at https://cachetax.aidojo.si/. This marketplace still serves it, so the install commands are unchanged:
 
     claude plugin marketplace add karanb192/claude-code-mods
     claude plugin install cache-tax@claude-code-mods
